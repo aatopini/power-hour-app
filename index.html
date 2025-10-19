@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Power Hour (Spotify)</title>
+<meta name="theme-color" content="#0b1220" />
+<style>
+  :root{
+    --bg:#0b1220;
+    --panel:#121a2a;
+    --muted:#7b8aa8;
+    --text:#eaf1ff;
+    --accent:#5ad0ff;
+    --accent2:#86e2a6;
+    --green:#23c55e;
+    --yellow:#f59f0b;
+    --red:#ef4444;
+    --ring:#55c4ec;
+  }
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif;
+    overflow:hidden;
+  }
+  a{color:var(--accent)}
+  .container{display:flex; height:100%}
+  .sidebar{
+    width:340px; min-width:320px; max-width:420px; height:100%;
+    overflow:auto; padding:18px 16px 24px; background:linear-gradient(180deg,#0f1729,#0a1220);
+    box-shadow:inset -1px 0 0 rgba(255,255,255,.06);
+  }
+  .section{background:var(--panel); border-radius:14px; padding:16px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,.25)}
+  .section h3{margin:0 0 10px 0; font-size:18px}
+  .muted{color:var(--muted); font-size:12px}
+  .row{display:flex; gap:10px}
+  .row > *{flex:1}
+  input[type=text]{
+    width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.08);
+    background:#0d1525; color:var(--text); outline:none;
+  }
+  button{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    border:0; padding:10px 14px; border-radius:10px; cursor:pointer; color:#08111f;
+    background:linear-gradient(180deg,#dff7ff,#a6e6ff); font-weight:700;
+  }
+  .btn-alt{background:linear-gradient(180deg,#ffe7bb,#ffd271)}
+  .btn-dark{background:#1f2a44; color:#dfe7ff}
+  .btn-green{background:linear-gradient(180deg,#c6ffd9,#7cf1a5)}
+  .status{margin-top:8px; font-size:12px; color:var(--muted)}
+  .content{
+    flex:1; height:100%; position:relative; display:flex; align-items:flex-start; justify-content:center;
+  }
+  .hud{
+    width:min(1280px,90%); margin-top:28px; background:var(--panel); border-radius:18px;
+    padding:28px 24px 34px; box-shadow:0 20px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  .ring-wrap{display:flex; flex-direction:column; align-items:center; justify-content:flex-start}
+  .ring{
+    width:clamp(220px, 50vh, 800px); height:clamp(220px, 50vh, 800px);
+    display:block;
+  }
+  .kpis{display:flex; gap:18px; margin-top:18px}
+  .kpi{flex:0 0 220px; background:#0e1626; border-radius:14px; padding:14px 16px}
+  .kpi .label{font-size:13px; color:var(--muted)}
+  .kpi .value{font-size:40px; font-weight:800; margin-top:4px}
+  .transports{display:flex; gap:16px; margin-top:18px}
+  .circle-btn{width:44px; height:44px; border-radius:50%; background:#0f182c; color:#dfe9ff; border:1px solid rgba(255,255,255,.08)}
+  .center{display:flex; align-items:center; justify-content:center}
+  .reveal{margin-top:14px; font-weight:700; letter-spacing:.4px; font-size:16px; filter:blur(6px)}
+  .reveal.show{filter:none}
+  .beep{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); margin-top:8px}
+  .runbar{display:flex; gap:10px; margin-top:8px}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <aside class="sidebar">
+    <h2 style="margin:0 0 6px">Power Hour (Spotify)</h2>
+    <p class="muted">60×1-minute rounds • 50s blind → 10s reveal • Shuffle • Round counter • On-screen timer. Requires Spotify Premium for web playback.</p>
+
+    <div class="section">
+      <h3>1) Connect to Spotify</h3>
+      <div class="muted" style="margin-bottom:8px">Scopes: playlist-modify-private playlist-read-private streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state</div>
+      <input id="clientId" type="text" placeholder="your Spotify app client_id" />
+      <div class="row" style="margin-top:10px">
+        <button id="loginBtn">Login with Spotify</button>
+        <button class="btn-dark" id="logoutBtn">Logout</button>
+      </div>
+      <div class="status" id="authStatus">Not authenticated.</div>
+    </div>
+
+    <div class="section">
+      <h3>2) Build a 60-track private playlist</h3>
+      <div class="row">
+        <input id="genre" type="text" placeholder="e.g., 2010s pop" />
+        <input id="yearRange" type="text" placeholder="e.g., 2008-20 (optional)" />
+      </div>
+      <div class="row" style="margin-top:10px">
+        <input id="playlistName" type="text" placeholder="Power Hour" />
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn-green" id="buildBtn">Create 60-track playlist</button>
+        <button class="btn-dark" id="openBtn">Open in Spotify</button>
+      </div>
+      <div class="status" id="buildStatus">Fill in a genre and click create.</div>
+    </div>
+
+    <div class="section">
+      <h3>3) Run the Power Hour</h3>
+      <div class="row">
+        <input id="rounds" type="text" value="60" />
+        <input id="spr" type="text" value="60" />
+      </div>
+      <div class="runbar">
+        <button id="startBtn">Start</button>
+        <button class="btn-alt" id="stopBtn">Stop</button>
+      </div>
+      <div class="status" id="runStatus">Ready.</div>
+    </div>
+
+    <div class="section">
+      <h3>Now Playing</h3>
+      <div id="nowPlaying" class="muted">—</div>
+      <div class="muted" style="margin-top:6px">Hint: title/artist stays blurred until 0:10 remains.</div>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="hud">
+      <div class="ring-wrap center">
+        <svg class="ring" viewBox="0 0 200 200">
+          <defs>
+            <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#55c4ec" />
+              <stop offset="100%" stop-color="#86e2a6" />
+            </linearGradient>
+          </defs>
+          <circle cx="100" cy="100" r="86" stroke="#0a1425" stroke-width="16" fill="none"/>
+          <circle id="ringStroke" cx="100" cy="100" r="86" stroke="url(#g1)" stroke-width="16" stroke-linecap="round" fill="none"
+                  stroke-dasharray="540" stroke-dashoffset="540" transform="rotate(-90 100 100)"/>
+        </svg>
+
+        <div id="reveal" class="reveal">—</div>
+        <div class="beep"><input id="beepToggle" type="checkbox" checked/> <span>Beep on reveal</span></div>
+
+        <div class="kpis">
+          <div class="kpi"><div class="label">Round</div><div class="value" id="kRound">0/60</div></div>
+          <div class="kpi"><div class="label">Time Left</div><div class="value" id="kTime">60</div></div>
+        </div>
+
+        <div class="transports">
+          <button id="prevBtn" class="circle-btn">⏮</button>
+          <button id="toggleBtn" class="circle-btn">▶</button>
+          <button id="nextBtn" class="circle-btn">⏭</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Spotify Web Playback SDK -->
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
+<script>
+/* ----------------------- Utilities ----------------------- */
+const $ = (q)=>document.querySelector(q);
+const ringStroke = document.getElementById('ringStroke');
+function setStatus(sel,msg){ const el=$(sel); if(el) el.textContent = msg; }
+function updateRing(frac){
+  // frac 0..1
+  const CIRC = 2*Math.PI*86;  // r=86, stroke-dasharray=540 close to this
+  const dash = Math.max(0, Math.min(CIRC, CIRC * (1-frac)));
+  ringStroke.setAttribute('stroke-dasharray', CIRC.toFixed(1));
+  ringStroke.setAttribute('stroke-dashoffset', dash.toFixed(1));
+}
+function updateKpis(round, remaining){
+  $('#kRound').textContent = `${round}/${totalRounds}`;
+  $('#kTime').textContent  = String(remaining).padStart(2,'0');
+}
+function showReveal(){ $('#reveal').classList.add('show'); }
+function hideReveal(){ $('#reveal').classList.remove('show'); }
+
+/* ------------------- PKCE + Auth Storage ------------------- */
+const SPOTIFY_AUTH = {
+  scopes: "playlist-modify-private playlist-read-private streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state",
+  token: null,
+  expiresAt: 0
+};
+const REDIRECT = window.location.origin + "/";
+function randStr(n){ const a="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"; let s=""; for(let i=0;i<n;i++) s+=a[Math.floor(Math.random()*a.length)]; return s; }
+async function sha256(x){ const d = new TextEncoder().encode(x); const b = await crypto.subtle.digest('SHA-256', d); return b; }
+function b64url(a){ return btoa(String.fromCharCode(...new Uint8Array(a))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+
+function saveToken(tok,expiresIn){
+  SPOTIFY_AUTH.token = tok;
+  SPOTIFY_AUTH.expiresAt = Date.now() + (expiresIn*1000 - 15000);
+  localStorage.setItem("ph_token", JSON.stringify({t:tok,e:SPOTIFY_AUTH.expiresAt}));
+}
+function loadToken(){
+  try{
+    const raw = JSON.parse(localStorage.getItem("ph_token")||"{}");
+    if(raw.t && raw.e && raw.e > Date.now()){
+      SPOTIFY_AUTH.token = raw.t; SPOTIFY_AUTH.expiresAt = raw.e;
+      setStatus('#authStatus','Authenticated.');
+      return true;
+    }
+  }catch{}
+  return false;
+}
+function clearToken(){
+  SPOTIFY_AUTH.token = null; SPOTIFY_AUTH.expiresAt = 0;
+  localStorage.removeItem("ph_token");
+  setStatus('#authStatus','Not authenticated.');
+}
+async function api(path,opts={}){
+  if(!SPOTIFY_AUTH.token) throw new Error("no token");
+  const r = await fetch("https://api.spotify.com"+path, {
+    ...opts,
+    headers:{
+      "Authorization":"Bearer "+SPOTIFY_AUTH.token,
+      "Content-Type":"application/json",
+      ...(opts.headers||{})
+    }
+  });
+  if(r.status===204) return null;
+  const j = await r.json().catch(()=>null);
+  if(!r.ok) throw (j||new Error("API error"));
+  return j;
+}
+
+/* ------------------------ Web Player ------------------------ */
+let player = null, deviceId = null;
+window.onSpotifyWebPlaybackSDKReady = () => {
+  // Lazy init when user hits Start
+};
+async function initPlayer(){
+  if(player) return;
+  await new Promise(res=>{
+    const wait = () => (window.Spotify && window.Spotify.Player) ? res() : setTimeout(wait, 50);
+    wait();
+  });
+  player = new Spotify.Player({
+    name: 'Power Hour Web Player',
+    getOAuthToken: cb => cb(SPOTIFY_AUTH.token),
+    volume: 0.9
+  });
+  player.addListener('ready', ({device_id}) => { deviceId = device_id; });
+  player.addListener('player_state_changed', s => {
+    if(s && s.track_window && s.track_window.current_track){
+      const t = s.track_window.current_track;
+      $('#nowPlaying').textContent = `${t.name} — ${t.artists.map(a=>a.name).join(', ')}`;
+      if($('#reveal').classList.contains('show')===false){
+        $('#reveal').textContent = `${t.artists.map(a=>a.name).join(', ')} — ${t.name}`;
+      }
+    }
+  });
+  await player.connect();
+}
+
+/* ------------------- Playlist creation ------------------- */
+let currentPlaylist = null;
+
+async function searchTracks(q, limit=20, offset=0){
+  const j = await api(`/v1/search?q=${encodeURIComponent(q)}&type=track&market=US&limit=${limit}&offset=${offset}`);
+  return (j.tracks && j.tracks.items) ? j.tracks.items : [];
+}
+async function createPlaylistFromGenre(genre, yearRange, name){
+  const me  = await api('/v1/me');
+  const pid = (await api(`/v1/users/${me.id}/playlists`, {
+    method:'POST',
+    body: JSON.stringify({ name, description:'Power Hour auto playlist', public:false })
+  })).id;
+
+  // sampling approach: 6 searches × 10 tracks ≈ 60 (dedup)
+  const seeds = [
+    `${genre}`, `${genre} hits`, `${genre} best`, `${genre} mix`, `${genre} throwback`, `${genre} playlist`
+  ];
+  const years = (yearRange||"").replace(/\s/g,'');
+  const yrQ = years ? ` year:${years}` : '';
+  const tracks = [];
+  const seen = new Set();
+
+  for(const s of seeds){
+    const items = await searchTracks(`${s}${yrQ}`, 15, 0);
+    for(const t of items){
+      if(seen.has(t.uri)) continue;
+      seen.add(t.uri);
+      tracks.push(t.uri);
+      if(tracks.length>=60) break;
+    }
+    if(tracks.length>=60) break;
+  }
+  while(tracks.length<60) tracks.push(tracks[tracks.length%Math.max(1,tracks.length)]); // pad if needed
+
+  // add to playlist in chunks
+  for(let i=0;i<tracks.length;i+=100){
+    await api(`/v1/playlists/${pid}/tracks`, {
+      method:'POST',
+      body: JSON.stringify({ uris: tracks.slice(i,i+100) })
+    });
+  }
+  const pl = await api(`/v1/playlists/${pid}`);
+  currentPlaylist = { id: pid, uri: pl.uri };
+  return pl;
+}
+
+/* ------------------- Run loop + controls ------------------- */
+let running=false, isPaused=false;
+let totalRounds=60, secondsPerRound=60;
+
+function beep(){
+  if(!$('#beepToggle').checked) return;
+  const ctx=new(window.AudioContext||window.webkitAudioContext)();
+  const o=ctx.createOscillator(); const g=ctx.createGain();
+  o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination);
+  g.gain.value=.0001; o.start();
+  g.gain.exponentialRampToValueAtTime(.3, ctx.currentTime+.01);
+  g.gain.exponentialRampToValueAtTime(.00001, ctx.currentTime+.2);
+  o.stop(ctx.currentTime+.21);
+}
+
+async function skipNext(){
+  try{ if(player && typeof player.nextTrack==='function'){ await player.nextTrack(); return; } }catch(e){}
+  try{ await api(`/v1/me/player/next?device_id=${deviceId}`, {method:'POST'}); }catch(e){ console.warn('REST next failed',e); }
+}
+
+let loopTimer=null;
+function startRoundLoop(){
+  running=true; isPaused=false; hideReveal();
+  let round=1; let revealed=false;
+  const lenMs = secondsPerRound*1000;
+  let start = performance.now();
+
+  updateKpis(round, secondsPerRound); updateRing(0); setStatus('#runStatus','Running…');
+
+  if(loopTimer){ clearInterval(loopTimer); loopTimer=null; }
+  loopTimer = setInterval(async ()=>{
+    if(!running) { clearInterval(loopTimer); loopTimer=null; return; }
+    if(isPaused) return;
+
+    const now = performance.now();
+    let el = now - start; if(el<0) el=0; if(el>lenMs) el=lenMs;
+    const remaining = Math.max(0, Math.ceil((lenMs - el)/1000));
+
+    if(!revealed && remaining<=10){ revealed=true; showReveal(); beep(); }
+    updateRing(el/lenMs); updateKpis(round, remaining);
+
+    if(el>=lenMs){
+      await skipNext();
+      round++;
+      if(round>totalRounds){ await stopPowerHour(); return; }
+      start = performance.now(); revealed=false; hideReveal();
+      updateKpis(round, secondsPerRound); updateRing(0);
+    }
+  }, 250);
+}
+
+async function startPowerHour(){
+  totalRounds = Math.max(1, parseInt($('#rounds').value||'60',10));
+  secondsPerRound = Math.max(5, parseInt($('#spr').value||'60',10));
+
+  if(!currentPlaylist){ alert('Create or select a playlist first.'); return; }
+  await initPlayer();
+  try{
+    await api('/v1/me/player', {method:'PUT', body:JSON.stringify({device_ids:[deviceId], play:false})});
+    await api(`/v1/me/player/shuffle?state=true&device_id=${deviceId}`, {method:'PUT'});
+    await api(`/v1/me/player/play?device_id=${deviceId}`, {
+      method:'PUT',
+      body: JSON.stringify({ context_uri: currentPlaylist.uri, offset:{position:0}, position_ms:0 })
+    });
+  }catch(e){ console.warn('start playback failed', e); }
+  startRoundLoop();
+}
+async function pausePowerHour(){
+  isPaused=true; setStatus('#runStatus','Paused.');
+  try{ await api(`/v1/me/player/pause?device_id=${deviceId}`, {method:'PUT'});}catch(e){}
+}
+async function resumePowerHour(){
+  isPaused=false; setStatus('#runStatus','Running…');
+  try{ await api(`/v1/me/player/play?device_id=${deviceId}`, {method:'PUT'});}catch(e){}
+}
+async function stopPowerHour(){
+  running=false; if(loopTimer){ clearInterval(loopTimer); loopTimer=null; }
+  hideReveal();
+  try{ await api(`/v1/me/player/pause?device_id=${deviceId}`, {method:'PUT'});}catch(e){}
+  updateKpis(0, secondsPerRound||60); updateRing(0); setStatus('#runStatus','Stopped.');
+  $('#toggleBtn').textContent='▶';
+}
+
+/* ------------------- Wiring + auth flow ------------------- */
+function persistId(){ const v=$('#clientId').value.trim(); if(v) localStorage.setItem('ph_client_id', v); }
+function restoreId(){ const v=localStorage.getItem('ph_client_id'); if(v) $('#clientId').value=v; }
+restoreId(); loadToken();
+
+$('#loginBtn').onclick = async ()=>{
+  persistId();
+  const clientId = $('#clientId').value.trim();
+  if(!clientId){ alert('Enter your Spotify client_id'); return; }
+  const state = randStr(12);
+  const codeVerifier = randStr(64);
+  sessionStorage.setItem('ph_cv', codeVerifier);
+  sessionStorage.setItem('ph_state', state);
+  const codeChallenge = b64url(await sha256(codeVerifier));
+  const url = new URL("https://accounts.spotify.com/authorize");
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("redirect_uri", REDIRECT);
+  url.searchParams.set("scope", SPOTIFY_AUTH.scopes);
+  url.searchParams.set("state", state);
+  url.searchParams.set("code_challenge_method", "S256");
+  url.searchParams.set("code_challenge", codeChallenge);
+  window.location = url.toString();
+};
+$('#logoutBtn').onclick = ()=>{ clearToken(); };
+
+(async function maybeHandleRedirect(){
+  const p = new URLSearchParams(location.search);
+  const code = p.get('code'); const state = p.get('state');
+  if(!code) return;
+  history.replaceState({}, "", REDIRECT);
+  const cv = sessionStorage.getItem('ph_cv'); const st = sessionStorage.getItem('ph_state');
+  if(!cv || st!==state){ alert("Auth state mismatch"); return; }
+  const clientId = localStorage.getItem('ph_client_id');
+  const body = new URLSearchParams({
+    client_id: clientId, grant_type:'authorization_code', code, redirect_uri: REDIRECT, code_verifier: cv
+  });
+  const r = await fetch('https://accounts.spotify.com/api/token', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body});
+  const j = await r.json();
+  if(!r.ok){ alert('Auth failed: '+JSON.stringify(j)); return; }
+  saveToken(j.access_token, j.expires_in);
+  setStatus('#authStatus','Authenticated.');
+})();
+
+/* --- UI buttons --- */
+$('#buildBtn').onclick = async ()=>{
+  try{
+    setStatus('#buildStatus','Building (this can take ~10–20s)…');
+    const pl = await createPlaylistFromGenre($('#genre').value.trim(), $('#yearRange').value.trim(), $('#playlistName').value.trim()||'Power Hour');
+    currentPlaylist = {id: pl.id, uri: pl.uri};
+    setStatus('#buildStatus', `Created playlist: ${pl.name}`);
+  }catch(e){
+    console.error(e);
+    setStatus('#buildStatus','Error creating playlist.');
+  }
+};
+$('#openBtn').onclick = ()=>{ if(currentPlaylist) window.open(`https://open.spotify.com/playlist/${currentPlaylist.id}`,'_blank'); };
+
+$('#startBtn').onclick = ()=> startPowerHour();
+$('#stopBtn').onclick  = ()=> stopPowerHour();
+
+$('#prevBtn').onclick = async ()=>{
+  try{ if(player && typeof player.previousTrack==='function') await player.previousTrack(); }catch(e){}
+  try{ await api(`/v1/me/player/previous?device_id=${deviceId}`, {method:'POST'});}catch(e){}
+};
+$('#toggleBtn').onclick = async ()=>{
+  if(isPaused){ await resumePowerHour(); $('#toggleBtn').textContent='⏸'; }
+  else       { await pausePowerHour();  $('#toggleBtn').textContent='▶'; }
+};
+$('#nextBtn').onclick = async ()=>{
+  try{ if(player && typeof player.nextTrack==='function') await player.nextTrack(); }catch(e){}
+  try{ await api(`/v1/me/player/next?device_id=${deviceId}`, {method:'POST'});}catch(e){}
+};
+</script>
+</body>
+</html>
