@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Power Hour (Spotify)</title>
   <meta name="theme-color" content="#0b0f14" />
-  <link rel="manifest" href="manifest.json" />
+  <!-- IMPORTANT: relative path for project URLs -->
+  <link rel="manifest" href="./manifest.json" />
   <style>
     :root{
       --bg:#0b0f14; --panel:#10151c; --border:#1f2630;
@@ -161,9 +162,9 @@
         <!-- Progress Ring -->
         <div class="progress-ring">
           <svg width="340" height="340">
-            <circle cx="170" cy="170" r="140" stroke="rgba(148, 163, 184, 0.2)" stroke-width="24" fill="none"/>
+            <circle cx="170" cy="170" r="140" stroke="rgba(148, 163, 184, 0.2)" stroke-width="24" fill="none"></circle>
             <circle id="progressCircle" cx="170" cy="170" r="140" stroke="#6ee7b7" stroke-width="24" 
-                    fill="none" stroke-linecap="round" stroke-dasharray="879.646" stroke-dashoffset="0"/>
+                    fill="none" stroke-linecap="round" stroke-dasharray="879.646" stroke-dashoffset="0"></circle>
           </svg>
         </div>
 
@@ -193,20 +194,20 @@
         <div class="controls">
           <button class="control-btn" id="prevBtn" title="Previous">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+              <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"></path>
             </svg>
           </button>
           <button class="control-btn play" id="playPauseBtn" title="Play/Pause">
             <svg id="playIcon" width="36" height="36" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z"/>
+              <path d="M8 5v14l11-7z"></path>
             </svg>
             <svg id="pauseIcon" width="36" height="36" viewBox="0 0 24 24" fill="currentColor" style="display:none">
-              <path d="M6 4h4v16H6zm8 0h4v16h-4z"/>
+              <path d="M6 4h4v16H6zm8 0h4v16h-4z"></path>
             </svg>
           </button>
           <button class="control-btn" id="nextBtn" title="Next">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 18l8.5-6L6 6v12zm10-12v12h2V6h-2z"/>
+              <path d="M6 18l8.5-6L6 6v12zm10-12v12h2V6h-2z"></path>
             </svg>
           </button>
         </div>
@@ -217,7 +218,13 @@
   <script>
   // ===== CONFIG =====
   const SPOTIFY_CLIENT_ID = "8fc1832fa4174a4f91be79ec44113742";
-  const REDIRECT_URI = window.location.origin + "/";
+
+  // Use a redirect URI that works on GitHub Pages *and* locally.
+  // Spotify requires exact whitelisted URLs; add both of these in your app settings:
+  // - https://aatopini.github.io/power-hour-app/
+  // - http://localhost:8080/   (or whatever you use locally)
+  const REDIRECT_URI = window.location.origin + window.location.pathname.replace(/index\.html?$/,'');
+
   const SCOPES = [
     "user-read-email","user-read-private",
     "playlist-modify-private","playlist-read-private",
@@ -313,7 +320,7 @@
       code_challenge_method:"S256",
       code_challenge:challenge,
       redirect_uri:REDIRECT_URI,
-      scope:SCOPES,
+      scope:SCOPES
     });
     window.location.assign(`https://accounts.spotify.com/authorize?${params.toString()}`);
   }
@@ -336,7 +343,8 @@
       client_id:SPOTIFY_CLIENT_ID, code_verifier
     });
     saveSession(tok);
-    history.replaceState({}, "", REDIRECT_URI);
+    // remove ?code=... from the URL without changing path
+    history.replaceState({}, "", window.location.pathname);
   }
 
   async function refreshIfNeeded(){
@@ -687,3 +695,22 @@
           clearSession();
           updateUI(false);
         }
+      } else {
+        updateUI(false);
+      }
+
+      // Register service worker with relative scope for project URL
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(console.error);
+        });
+      }
+    }catch(e){
+      console.error(e);
+      authStatus.innerHTML = `<span class="bad">Error: ${escapeHtml(e.message||e)}</span>`;
+      updateUI(false);
+    }
+  })();
+  </script>
+</body>
+</html>
