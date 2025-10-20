@@ -408,6 +408,40 @@ async function pausePlayback(){
     stopTimer();
   }
 
+    async function getDevices() {
+  const token = await getAccessToken();
+  const r = await fetch("https://api.spotify.com/v1/me/player/devices", {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!r.ok) throw new Error(`devices ${r.status}`);
+  const j = await r.json();
+  return j.devices || [];
+}
+
+async function transferPlayback(deviceIds, play=true) {
+  const token = await getAccessToken();
+  await fetch("https://api.spotify.com/v1/me/player", {
+    method: "PUT",
+    headers: { "Authorization": `Bearer ${token}`, "Content-Type":"application/json" },
+    body: JSON.stringify({ device_ids: deviceIds, play })
+  });
+}
+
+// wait up to `ms` for the Web SDK to report a device_id
+function waitForPlayerDeviceId(ms=4000) {
+  return new Promise(resolve => {
+    if (playerDeviceId) return resolve(playerDeviceId);
+    const start = Date.now();
+    const t = setInterval(() => {
+      if (playerDeviceId || Date.now() - start > ms) {
+        clearInterval(t);
+        resolve(playerDeviceId || null);
+      }
+    }, 100);
+  });
+}
+
+
   // ===== PLAYLIST BUILDING =====
 
   function parseYears(s){
@@ -559,54 +593,55 @@ async function pausePlayback(){
   }
 
 // Start playback on the selected device from the *beginning* of the playlist
-async function ensureDeviceAndStartFromBeginning(playlistId){
+// Robust: pick a target device, transfer, and start playlist at track 1 / 0:00
+async function ensureDeviceAndStartFromBeginning(playlistId) {
   const token = await getAccessToken();
 
-  // If we know the Web Playback SDK device, transfer playback to it and start
-  if (playerDeviceId) {
-    await fetch(`https://api.spotify.com/v1/me/player`, {
+  // 1) Give the Web Playback SDK a moment to become ready
+  const webDeviceId = await waitForPlayerDeviceId(5000);
+
+  // 2) Inspect devices; prefer our web device, otherwise any active device
+  let devices = await getDevices();
+  let targetId = null;
+
+  // prefer our web player if present
+  if (webDeviceId && devices.some(d => d.id === webDeviceId)) {
+    targetId = webDeviceId;
+  } else {
+    // otherwise pick an active device (phone/desktop/web)
+    const active = devices.find(d => d.is_active) || devices[0];
+    if (active) targetId = active.id;
+  }
+
+  // If still no device, ask the user to open Spotify and play any track for a second
+  if (!targetId) {
+    throw new Error("No active Spotify device found. Open Spotify (app or web), press play once, then hit Start again.");
+  }
+
+  // 3) Transfer playback to the target and ensure it's playing state
+  try { await transferPlayback([targetId], true); } catch {}
+
+  // 4) Start playlist at the beginning with an explicit offset & position
+  const body = {
+    context_uri: `spotify:playlist:${playlistId}`,
+    offset: { position: 0 },
+    position_ms: 0
+  };
+
+  // Retry a couple of times if the first call races the device becoming active
+  for (let i = 0; i < 3; i++) {
+    const res = await fetch("https://api.spotify.com/v1/me/player/play", {
       method: "PUT",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ device_ids: [playerDeviceId], play: true })
-    }).catch(()=>{});
+      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (res.ok) return;
+    await new Promise(r => setTimeout(r, 600)); // brief backoff
   }
 
-  // Explicitly start the playlist at the first track, position 0ms
-  await fetch(`https://api.spotify.com/v1/me/player/play`, {
-    method: "PUT",
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      context_uri: `spotify:playlist:${playlistId}`,
-      offset: { position: 0 },  // first track
-      position_ms: 0            // at the beginning
-    })
-  }).catch(()=>{});
+  throw new Error('Could not start playback on any device.');
 }
-    
-  function stopTimer(){
-    if(intervalId){
-      clearInterval(intervalId);
-      intervalId = null;
-    }
-    isPlaying = false;
-    updatePlayPauseIcon();
-  }
 
-  function updatePlayPauseIcon(){
-    if(isPlaying){
-      playIcon.style.display = 'none';
-      pauseIcon.style.display = 'block';
-    } else {
-      playIcon.style.display = 'block';
-      pauseIcon.style.display = 'none';
-    }
-  }
 
   async function startPowerHour(){
     const pid = localStorage.getItem(K.playlist_id);
