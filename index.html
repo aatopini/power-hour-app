@@ -317,6 +317,18 @@
     logoutBtn.disabled = !authenticated;
   }
 
+async function pausePlayback(){
+  const token = await getAccessToken();
+  try {
+    await fetch(`https://api.spotify.com/v1/me/player/pause`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  } catch (_) {
+    // ignore; device might already be paused/not active
+  }
+}
+
   // ===== AUTH FLOW =====
   async function beginLogin(){
     const code_verifier = b64url(crypto.getRandomValues(new Uint8Array(64)));
@@ -645,13 +657,30 @@ async function ensureDeviceAndStartFromBeginning(playlistId){
     }, 1000);
   }
 
-  function stopPowerHour(){
-    stopTimer();
-    currentRound = 1;
-    timeLeft = parseInt(secondsPerTrackInput.value) || 30;
-    updateDisplay();
-    runStatus.textContent = "Paused.";
-  }
+function stopPowerHour(){
+  // stop the countdown loop
+  stopTimer();
+
+  // pause Spotify playback
+  pausePlayback();
+
+  // reset round/time to "fresh start" state
+  currentRound = 1;
+  secondsPerTrack = parseInt(secondsPerTrackInput.value) || 30;
+  timeLeft = secondsPerTrack;
+
+  // reset track-info UI
+  trackInfo.classList.add('blurred');
+  trackInfo.querySelector('.track-text').textContent = "Hidden Track Title — Artist Name";
+
+  // reset flags & icons
+  isPlaying = false;
+  updatePlayPauseIcon();
+
+  // reflect on-screen
+  updateDisplay();
+  runStatus.textContent = "Ready.";
+}
 
   function togglePlayPause(){
     if(isPlaying){
