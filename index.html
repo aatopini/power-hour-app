@@ -9,140 +9,269 @@
   <style>
     :root{
       --bg:#0b0f14; --panel:#10151c; --border:#1f2630;
-      --text:#e6f0ff; --muted:#9bb0c8; --accent:#4dc9f0; --ok:#29cc7a;
+      --text:#e6f0ff; --muted:#9bb0c8; --accent:#4dc9f0; --ok:#29cc7a; --warn:#ffcc66; --bad:#ff6b6b;
     }
     *{box-sizing:border-box}
-    html,body{height:100%}
+    html,body{height:100%; margin:0; padding:0;}
     body{
-      margin:0; font:16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
       color:var(--text); background:linear-gradient(180deg,#0b0f14 0%,#0e1420 100%);
     }
-    .container{max-width:1100px;margin:24px auto;padding:0 16px;display:grid;grid-template-columns:320px 1fr;gap:18px}
-    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
-    h1{font-size:28px;margin:0 0 4px}
-    h2{font-size:18px;margin:0;color:var(--muted)}
-    h3{font-size:16px;margin:0 0 8px}
-    p.muted{color:var(--muted);margin:6px 0 12px}
-    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    button{
-      border:1px solid var(--border); background:#0f1a2a; color:#fff; padding:10px 14px; border-radius:10px; cursor:pointer;
+    .container{display:grid;grid-template-columns:320px 1fr;height:100vh}
+    .sidebar{background:var(--panel);border-right:1px solid var(--border);padding:24px;overflow-y:auto}
+    .main{display:flex;align-items:center;justify-content:center;padding:40px}
+    
+    h1{font-size:24px;margin:0 0 4px;font-weight:700}
+    h2{font-size:14px;margin:0 0 20px;color:var(--muted);font-weight:400}
+    h3{font-size:16px;margin:0 0 8px;font-weight:700}
+    p.muted{color:var(--muted);margin:6px 0 12px;font-size:13px;line-height:1.4}
+    
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    label{font-size:12px;color:var(--muted);display:block;margin:10px 0 6px}
+    input[type="text"], input[type="number"], select{
+      width:100%; background:#0f1622; border:1px solid var(--border); color:#e6f0ff; 
+      padding:10px 12px; border-radius:8px; font-size:14px;
     }
-    button.primary{background:#1ed760;color:#000;border-color:#1ed760;font-weight:700}
-    button:disabled{opacity:.6;cursor:not-allowed}
-    input[type="text"]{background:#0f1622;border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:10px;width:100%}
+    input[type="range"]{width:100%;accent-color:#1ed760}
+    .check{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px;margin:8px 0}
+    
+    button{
+      border:1px solid var(--border); background:#1a2332; color:#fff; padding:10px 16px; 
+      border-radius:8px; cursor:pointer; font-size:14px; font-weight:600;
+      transition:all 0.2s;
+    }
+    button:hover{background:#243447}
+    button.primary{background:#1ed760;color:#000;border-color:#1ed760}
+    button.primary:hover{background:#1fdf67}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    button.secondary{background:#2a3441}
+    
     .status{font-size:13px;color:var(--muted);margin-top:8px}
     .ok{color:var(--ok)}
-    .bad{color:#ff6b6b}
-    .pill{font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:999px;color:var(--muted)}
-    .minirow{display:flex;align-items:center;gap:10px;margin-top:6px}
-    .avatar{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);display:none}
-    @media (max-width:900px){ .container{grid-template-columns:1fr} }
+    .bad{color:var(--bad)}
+    .warn{color:var(--warn)}
+    
+    hr{border:none;border-top:1px solid var(--border);margin:20px 0;opacity:0.5}
+    
+    /* Timer Display */
+    .timer-container{display:flex;flex-direction:column;align-items:center}
+    .progress-ring{position:relative;width:340px;height:340px;margin-bottom:40px}
+    .progress-ring svg{transform:rotate(-90deg)}
+    .progress-ring circle{transition:stroke-dashoffset 0.3s linear}
+    
+    .track-info{
+      text-align:center;margin-bottom:30px;min-height:60px;display:flex;
+      align-items:center;justify-content:center;
+    }
+    .track-info.blurred{filter:blur(8px);user-select:none}
+    .track-text{font-size:18px;color:var(--text)}
+    
+    .stats{display:flex;gap:60px;margin-bottom:30px}
+    .stat{text-align:center}
+    .stat-label{font-size:13px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px}
+    .stat-value{font-size:48px;font-weight:700;color:var(--text)}
+    
+    .controls{display:flex;gap:20px;align-items:center;margin-bottom:20px}
+    .control-btn{
+      background:transparent;border:none;color:var(--muted);cursor:pointer;
+      padding:8px;border-radius:50%;transition:all 0.2s;
+    }
+    .control-btn:hover{color:var(--text);background:rgba(255,255,255,0.1)}
+    .control-btn.play{color:var(--text)}
+    
+    @media (max-width:960px){ 
+      .container{grid-template-columns:1fr;height:auto}
+      .sidebar{border-right:none;border-bottom:1px solid var(--border)}
+      .main{min-height:500px}
+    }
   </style>
+  <script src="https://sdk.scdn.co/spotify-player.js"></script>
 </head>
 <body>
   <div class="container">
-    <aside class="card">
-      <h1>Power Hour</h1>
-      <h2>(Spotify)</h2>
-      <div style="height:10px"></div>
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+      <h1>Power Hour (Spotify)</h1>
+      <h2>60+ 1-minute rounds • 30s blind = 10s reveal • Shuffle • Round counter</h2>
 
       <!-- STEP 1: CONNECT -->
       <section>
         <h3>1) Connect to Spotify</h3>
-        <p class="muted">Click <b>Login with Spotify</b> and sign in. You’ll stay signed in on this device.</p>
+        <p class="muted">Scopes: playlist-modify-private playlist-read-private streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state</p>
 
         <div class="row">
           <button id="loginBtn" class="primary">Login with Spotify</button>
-          <button id="logoutBtn">Logout</button>
-          <span id="authChip" class="pill">Not authenticated</span>
+          <button id="logoutBtn" class="secondary">Logout</button>
         </div>
 
         <div id="authStatus" class="status">Not authenticated.</div>
-
-        <!-- CHANGE 1: “Logged in as …” + avatar -->
-        <div class="minirow">
-          <img id="avatar" class="avatar" alt="Spotify profile avatar">
-          <div id="loggedInAs" class="status"></div>
-        </div>
       </section>
 
-      <hr style="border-color:var(--border);opacity:.6;margin:16px 0">
+      <hr>
 
-      <!-- STEP 2: (keep your existing UI here) -->
+      <!-- STEP 2: BUILD PLAYLIST -->
       <section>
-        <h3>2) Build a 60-track playlist</h3>
-        <p class="muted">Your existing “build playlist” controls can remain below. This file only changes login.</p>
-        <div class="row"><button id="demoBtn">Test API (Get Profile)</button></div>
-        <div id="demoOut" class="status"></div>
+        <h3>2) Build a 60-track private playlist</h3>
+        
+        <label for="genre">Genre</label>
+        <input id="genre" type="text" placeholder="e.g., emo">
+        
+        <label for="era">Era / years (optional)</label>
+        <input id="era" type="text" placeholder="e.g., 2008-20">
+        
+        <label for="playlistName">Playlist name</label>
+        <input id="playlistName" type="text" placeholder="Emo Test A">
+
+        <div class="row" style="margin-top:14px">
+          <button id="createBtn" class="primary">Create 60-track playlist</button>
+          <button id="openSpotifyBtn" class="secondary">Open in Spotify</button>
+        </div>
+        <div id="buildStatus" class="status"></div>
+      </section>
+
+      <hr>
+
+      <!-- STEP 3: RUN POWER HOUR -->
+      <section>
+        <h3>3) Run the Power Hour</h3>
+        
+        <div class="two" style="margin-bottom:10px">
+          <div>
+            <label for="totalTracks">Tracks</label>
+            <input id="totalTracks" type="number" value="60" min="1" max="100">
+          </div>
+          <div>
+            <label for="secondsPerTrack">Seconds/track</label>
+            <input id="secondsPerTrack" type="number" value="30" min="10" max="120">
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="startBtn" class="primary">Start</button>
+          <button id="stopBtn" class="secondary">Stop</button>
+        </div>
+        <div id="runStatus" class="status">Paused.</div>
       </section>
     </aside>
 
-    <main class="card">
-      <h3>Live HUD</h3>
-      <p class="muted">Your existing timer / reveal UI goes here and doesn’t need to change for the new login.</p>
-      <!-- Keep your current markup; not required for auth. -->
+    <!-- RIGHT MAIN AREA -->
+    <main class="main">
+      <div class="timer-container">
+        <!-- Progress Ring -->
+        <div class="progress-ring">
+          <svg width="340" height="340">
+            <circle cx="170" cy="170" r="140" stroke="rgba(148, 163, 184, 0.2)" stroke-width="24" fill="none"/>
+            <circle id="progressCircle" cx="170" cy="170" r="140" stroke="#6ee7b7" stroke-width="24" 
+                    fill="none" stroke-linecap="round" stroke-dasharray="879.646" stroke-dashoffset="0"/>
+          </svg>
+        </div>
+
+        <!-- Track Info (blurred until reveal) -->
+        <div class="track-info blurred" id="trackInfo">
+          <div class="track-text">Hidden Track Title — Artist Name</div>
+        </div>
+
+        <!-- Beep Checkbox -->
+        <label class="check" style="margin-bottom:24px">
+          <input id="beepOnReveal" type="checkbox" checked> Beep on reveal
+        </label>
+
+        <!-- Round / Time Stats -->
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label">Round</div>
+            <div class="stat-value" id="roundDisplay">1/60</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Time Left</div>
+            <div class="stat-value" id="timeDisplay">30</div>
+          </div>
+        </div>
+
+        <!-- Playback Controls -->
+        <div class="controls">
+          <button class="control-btn" id="prevBtn" title="Previous">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+            </svg>
+          </button>
+          <button class="control-btn play" id="playPauseBtn" title="Play/Pause">
+            <svg id="playIcon" width="36" height="36" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+            <svg id="pauseIcon" width="36" height="36" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+              <path d="M6 4h4v16H6zm8 0h4v16h-4z"/>
+            </svg>
+          </button>
+          <button class="control-btn" id="nextBtn" title="Next">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 18l8.5-6L6 6v12zm10-12v12h2V6h-2z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
     </main>
   </div>
 
   <script>
-  /**
-   * ===== Spotify Auth (Authorization Code with PKCE) =====
-   * - No client secret required
-   * - Tokens persisted in localStorage
-   * - Auto refresh when near expiry
-   */
-
-  // ---------- Configure these ----------
-  const SPOTIFY_CLIENT_ID = "8fc1832fa4174a4f91be79ec44113742"; // your client ID
-  const REDIRECT_URI = window.location.origin + "/";   // change if your callback path differs
+  // ===== CONFIG =====
+  const SPOTIFY_CLIENT_ID = "8fc1832fa4174a4f91be79ec44113742";
+  const REDIRECT_URI = window.location.origin + "/";
   const SCOPES = [
-    "user-read-email",
-    "user-read-private",
-    "playlist-modify-private",
-    "playlist-read-private",
-    "user-read-playback-state",
-    "user-modify-playback-state",
-    "user-read-playback-position",
+    "user-read-email","user-read-private",
+    "playlist-modify-private","playlist-read-private",
+    "user-read-playback-state","user-modify-playback-state","user-read-playback-position",
+    "streaming"
   ].join(" ");
-  // -------------------------------------
 
-  // DOM
-  const loginBtn    = document.getElementById("loginBtn");
-  const logoutBtn   = document.getElementById("logoutBtn");
-  const authStatus  = document.getElementById("authStatus");
-  const authChip    = document.getElementById("authChip");
-  const demoBtn     = document.getElementById("demoBtn");
-  const demoOut     = document.getElementById("demoOut");
-  const loggedInAs  = document.getElementById("loggedInAs"); // 2a
-  const avatarImg   = document.getElementById("avatar");      // avatar
+  // ===== DOM ELEMENTS =====
+  const loginBtn = document.getElementById("loginBtn");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const authStatus = document.getElementById("authStatus");
+  const genreInput = document.getElementById("genre");
+  const eraInput = document.getElementById("era");
+  const playlistName = document.getElementById("playlistName");
+  const createBtn = document.getElementById("createBtn");
+  const openSpotifyBtn = document.getElementById("openSpotifyBtn");
+  const buildStatus = document.getElementById("buildStatus");
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn = document.getElementById("stopBtn");
+  const runStatus = document.getElementById("runStatus");
+  const totalTracksInput = document.getElementById("totalTracks");
+  const secondsPerTrackInput = document.getElementById("secondsPerTrack");
+  const progressCircle = document.getElementById("progressCircle");
+  const trackInfo = document.getElementById("trackInfo");
+  const roundDisplay = document.getElementById("roundDisplay");
+  const timeDisplay = document.getElementById("timeDisplay");
+  const playPauseBtn = document.getElementById("playPauseBtn");
+  const playIcon = document.getElementById("playIcon");
+  const pauseIcon = document.getElementById("pauseIcon");
+  const prevBtn = document.getElementById("prevBtn");
+  const nextBtn = document.getElementById("nextBtn");
+  const beepOnReveal = document.getElementById("beepOnReveal");
 
-  // 2a: tiny HTML-escape helper
-  function escapeHtml(s){
-    return String(s)
-      .replace(/&/g,"&amp;")
-      .replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;")
-      .replace(/"/g,"&quot;")
-      .replace(/'/g,"&#39;");
-  }
-
-  // Storage keys
+  // ===== STORAGE KEYS =====
   const K = {
     access_token: "sp_access_token",
     refresh_token: "sp_refresh_token",
-    expires_at:   "sp_expires_at",
-    code_verifier:"sp_code_verifier"
+    expires_at: "sp_expires_at",
+    code_verifier: "sp_code_verifier",
+    playlist_id: "ph_playlist_id",
+    playlist_tracks: "ph_playlist_tracks"
   };
 
-  // Helpers
+  // ===== HELPERS =====
   const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))
-                          .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+    .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
   const nowSec = () => Math.floor(Date.now()/1000);
+  const escapeHtml = (s) => String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 
   async function sha256(str){
     const enc = new TextEncoder();
-    const data = enc.encode(str);
-    const hash = await crypto.subtle.digest("SHA-256", data);
+    const hash = await crypto.subtle.digest("SHA-256", enc.encode(str));
     return new Uint8Array(hash);
   }
 
@@ -150,111 +279,75 @@
     if(access_token) localStorage.setItem(K.access_token, access_token);
     if(refresh_token) localStorage.setItem(K.refresh_token, refresh_token);
     if(expires_in){
-      const at = nowSec() + Number(expires_in) - 30; // 30s early skew
+      const at = nowSec() + Number(expires_in) - 30;
       localStorage.setItem(K.expires_at, String(at));
     }
   }
+
   function clearSession(){
     [K.access_token, K.refresh_token, K.expires_at, K.code_verifier].forEach(k=>localStorage.removeItem(k));
   }
+
   function session(){
     const access_token = localStorage.getItem(K.access_token);
     const refresh_token= localStorage.getItem(K.refresh_token);
-    const expires_at   = Number(localStorage.getItem(K.expires_at)||0);
+    const expires_at = Number(localStorage.getItem(K.expires_at)||0);
     return {access_token, refresh_token, expires_at};
   }
 
-  // 2b: updateUI now takes the full profile and fills “Logged in as …” + avatar
-  function updateUI(authenticated, profile){
-    const email = profile?.email || "";
-    const name  = profile?.display_name || profile?.id || "";
-    const avatarUrl = (profile?.images && profile.images[0] && profile.images[0].url) || "";
-
-    authChip.textContent = authenticated ? "Authenticated" : "Not authenticated";
-    authChip.style.borderColor = authenticated ? "rgba(41,204,122,.5)" : "var(--border)";
-    authChip.style.color = authenticated ? "var(--ok)" : "var(--muted)";
-
-    authStatus.innerHTML = authenticated
-      ? `Signed in${email ? ` as <b>${escapeHtml(email)}</b>` : ""}.`
-      : "Not authenticated.";
-
-    if(authenticated){
-      loggedInAs.innerHTML = name
-        ? `Logged in as <b>${escapeHtml(name)}</b>${email ? ` <span class="muted">(${escapeHtml(email)})</span>` : ""}`
-        : "";
-      if(avatarUrl){
-        avatarImg.src = avatarUrl;
-        avatarImg.style.display = "inline-block";
-      }else{
-        avatarImg.removeAttribute("src");
-        avatarImg.style.display = "none";
-      }
-    }else{
-      loggedInAs.textContent = "";
-      avatarImg.removeAttribute("src");
-      avatarImg.style.display = "none";
-    }
-
+  function updateUI(authenticated){
+    authStatus.textContent = authenticated ? "Authenticated." : "Not authenticated.";
+    authStatus.className = authenticated ? "status ok" : "status";
     loginBtn.disabled = authenticated;
     logoutBtn.disabled = !authenticated;
   }
 
+  // ===== AUTH FLOW =====
   async function beginLogin(){
-    // Generate PKCE
     const code_verifier = b64url(crypto.getRandomValues(new Uint8Array(64)));
     const challenge = b64url(await sha256(code_verifier));
     localStorage.setItem(K.code_verifier, code_verifier);
-
     const params = new URLSearchParams({
-      response_type: "code",
-      client_id: SPOTIFY_CLIENT_ID,
-      code_challenge_method: "S256",
-      code_challenge: challenge,
-      redirect_uri: REDIRECT_URI,
-      scope: SCOPES,
+      response_type:"code",
+      client_id:SPOTIFY_CLIENT_ID,
+      code_challenge_method:"S256",
+      code_challenge:challenge,
+      redirect_uri:REDIRECT_URI,
+      scope:SCOPES,
     });
-
     window.location.assign(`https://accounts.spotify.com/authorize?${params.toString()}`);
+  }
+
+  async function tokenPOST(body){
+    const res = await fetch("https://accounts.spotify.com/api/token", {
+      method:"POST",
+      headers:{"Content-Type":"application/x-www-form-urlencoded"},
+      body:new URLSearchParams(body)
+    });
+    if(!res.ok) throw new Error(`Token error ${res.status}`);
+    return res.json();
   }
 
   async function exchangeCodeForToken(code){
     const code_verifier = localStorage.getItem(K.code_verifier);
-    if(!code_verifier) throw new Error("Missing PKCE verifier in storage.");
-
-    const body = new URLSearchParams({
-      grant_type: "authorization_code",
-      code, redirect_uri: REDIRECT_URI,
-      client_id: SPOTIFY_CLIENT_ID,
-      code_verifier
+    const tok = await tokenPOST({
+      grant_type:"authorization_code",
+      code, redirect_uri:REDIRECT_URI,
+      client_id:SPOTIFY_CLIENT_ID, code_verifier
     });
-
-    const res = await fetch("https://accounts.spotify.com/api/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body
-    });
-    if(!res.ok) throw new Error(`Token exchange failed: ${res.status}`);
-    const tok = await res.json();
     saveSession(tok);
-    history.replaceState({}, "", REDIRECT_URI); // clean URL
+    history.replaceState({}, "", REDIRECT_URI);
   }
 
   async function refreshIfNeeded(){
     const s = session();
     if(!s.refresh_token) return;
-    if(s.expires_at && s.expires_at - nowSec() > 45) return; // still valid
-    const body = new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: s.refresh_token,
-      client_id: SPOTIFY_CLIENT_ID
+    if(s.expires_at && s.expires_at - nowSec() > 45) return;
+    const tok = await tokenPOST({
+      grant_type:"refresh_token",
+      refresh_token:s.refresh_token,
+      client_id:SPOTIFY_CLIENT_ID
     });
-    const res = await fetch("https://accounts.spotify.com/api/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body
-    });
-    if(!res.ok) throw new Error(`Refresh failed: ${res.status}`);
-    const tok = await res.json();
     saveSession(tok);
   }
 
@@ -263,65 +356,334 @@
     return localStorage.getItem(K.access_token);
   }
 
-  async function fetchMe(){
+  async function api(path, init={}){
     const token = await getAccessToken();
-    if(!token) throw new Error("Not authenticated");
-    const r = await fetch("https://api.spotify.com/v1/me", {
-      headers: { Authorization: `Bearer ${token}` }
+    const res = await fetch(`https://api.spotify.com/v1${path}`, {
+      ...init,
+      headers: { "Authorization": `Bearer ${token}`, "Content-Type":"application/json", ...(init.headers||{}) }
     });
-    if(!r.ok) throw new Error(`me() failed: ${r.status}`);
-    return r.json();
+    if(!res.ok){
+      const msg = await res.text().catch(()=>res.statusText);
+      throw new Error(`${res.status} ${msg}`);
+    }
+    return res.json();
   }
 
-  function logout(){
-    clearSession();
+  async function fetchMe(){ return api("/me"); }
+
+  function logout(){ 
+    clearSession(); 
     updateUI(false);
+    localStorage.removeItem(K.playlist_id);
+    localStorage.removeItem(K.playlist_tracks);
+    buildStatus.textContent = "";
+    stopTimer();
   }
 
-  // Wire up
-  loginBtn.addEventListener("click", beginLogin);
-  logoutBtn.addEventListener("click", logout);
+  // ===== PLAYLIST BUILDING =====
+  function parseYears(s){
+    if(!s) return {};
+    const m = String(s).trim().match(/(\d{4})(?:\D+(\d{2,4}))?/);
+    if(!m) return {};
+    const start = +m[1];
+    const end = m[2] ? (+m[2].length===2 ? +(`${String(start).slice(0,2)}${m[2]}`) : +m[2]) : start;
+    return {start, end};
+  }
 
-  demoBtn?.addEventListener("click", async () => {
-    demoOut.textContent = "Calling Spotify…";
+  async function searchTracks(q, limit=20, offset=0){
+    const token = await getAccessToken();
+    const params = new URLSearchParams({ q, type:"track", limit, offset });
+    const r = await fetch(`https://api.spotify.com/v1/search?${params}`, {
+      headers:{ Authorization:`Bearer ${token}` }
+    });
+    if(!r.ok) throw new Error(`search failed ${r.status}`);
+    const json = await r.json();
+    return (json.tracks?.items||[]);
+  }
+
+  async function buildPlaylist(){
+    buildStatus.textContent = "Building playlist...";
     try{
       const me = await fetchMe();
-      demoOut.innerHTML = `Hello, <b>${escapeHtml(me.display_name || me.id)}</b> (${escapeHtml(me.email || "no email")})`;
-      updateUI(true, me); // 2c
-    }catch(err){
-      demoOut.textContent = String(err.message || err);
-    }
-  });
+      const name = playlistName.value.trim() || `Power Hour — ${new Date().toLocaleDateString()}`;
+      const {start,end} = parseYears(eraInput.value);
+      const genre = genreInput.value.trim();
 
-  // Handle redirect & restore session
+      const parts = [];
+      if(genre) parts.push(`genre:"${genre}"`);
+      if(start && end) parts.push(`year:${start}-${end}`);
+      else if(start) parts.push(`year:${start}`);
+      parts.push(`tag:hipster OR tag:new`);
+      const baseQ = parts.join(" ");
+
+      let pool = [];
+      for(let off=0; off<200 && pool.length<120; off+=20){
+        const chunk = await searchTracks(baseQ, 20, off);
+        pool = pool.concat(chunk);
+        if(chunk.length<20) break;
+      }
+      
+      const chosen = pool.slice(0,60);
+      if(chosen.length<10) throw new Error("Not enough tracks found. Try different genre/years.");
+
+      const created = await api(`/users/${me.id}/playlists`, {
+        method:"POST",
+        body: JSON.stringify({ name, description:"Power Hour auto-generated", public: false })
+      });
+
+      const uris = chosen.map(t=>`spotify:track:${t.id}`);
+      for(let i=0;i<uris.length;i+=100){
+        await api(`/playlists/${created.id}/tracks`, {
+          method:"POST",
+          body: JSON.stringify({ uris: uris.slice(i,i+100) })
+        });
+      }
+
+      // Store playlist info
+      localStorage.setItem(K.playlist_id, created.id);
+      localStorage.setItem(K.playlist_tracks, JSON.stringify(chosen.map(t=>({
+        name: t.name,
+        artist: t.artists[0]?.name || "Unknown"
+      }))));
+
+      openSpotifyBtn.onclick = () => window.open(`https://open.spotify.com/playlist/${created.id}`, '_blank');
+      buildStatus.innerHTML = `<span class="ok">Created playlist: ${escapeHtml(name)}</span>`;
+    }catch(err){
+      buildStatus.innerHTML = `<span class="bad">Error: ${escapeHtml(err.message||err)}</span>`;
+    }
+  }
+
+  // ===== POWER HOUR TIMER =====
+  let playerDeviceId = null;
+  let currentRound = 0;
+  let timeLeft = 30;
+  let totalTracks = 60;
+  let secondsPerTrack = 30;
+  let intervalId = null;
+  let isPlaying = false;
+  let playlistTracks = [];
+
+  const CIRCUMFERENCE = 2 * Math.PI * 140;
+
+  function updateProgressRing(){
+    const progress = (timeLeft / secondsPerTrack) * 100;
+    const offset = CIRCUMFERENCE - (progress / 100) * CIRCUMFERENCE;
+    progressCircle.style.strokeDashoffset = offset;
+  }
+
+  function updateDisplay(){
+    roundDisplay.textContent = `${currentRound}/${totalTracks}`;
+    timeDisplay.textContent = timeLeft;
+    updateProgressRing();
+    
+    // Show track info in last 10 seconds
+    if(timeLeft <= 10 && playlistTracks.length > 0){
+      const trackIdx = (currentRound - 1) % playlistTracks.length;
+      const track = playlistTracks[trackIdx];
+      trackInfo.classList.remove('blurred');
+      trackInfo.querySelector('.track-text').textContent = `${track.name} — ${track.artist}`;
+    } else {
+      trackInfo.classList.add('blurred');
+      trackInfo.querySelector('.track-text').textContent = "Hidden Track Title — Artist Name";
+    }
+  }
+
+  async function ensureDeviceAndStart(playlistId){
+    const token = await getAccessToken();
+    if(playerDeviceId){
+      await fetch(`https://api.spotify.com/v1/me/player`, {
+        method:"PUT",
+        headers:{ "Authorization":`Bearer ${token}`, "Content-Type":"application/json" },
+        body: JSON.stringify({ device_ids:[playerDeviceId], play:true })
+      }).catch(()=>{});
+    }
+    await fetch(`https://api.spotify.com/v1/me/player/play`, {
+      method:"PUT",
+      headers:{ "Authorization":`Bearer ${token}`, "Content-Type":"application/json" },
+      body: JSON.stringify({ context_uri:`spotify:playlist:${playlistId}` })
+    }).catch(()=>{});
+  }
+
+  async function skipToNext(){
+    const token = await getAccessToken();
+    await fetch(`https://api.spotify.com/v1/me/player/next`, { 
+      method:"POST", 
+      headers:{ Authorization:`Bearer ${token}` }
+    }).catch(()=>{});
+  }
+
+  function stopTimer(){
+    if(intervalId){
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    isPlaying = false;
+    updatePlayPauseIcon();
+  }
+
+  function updatePlayPauseIcon(){
+    if(isPlaying){
+      playIcon.style.display = 'none';
+      pauseIcon.style.display = 'block';
+    } else {
+      playIcon.style.display = 'block';
+      pauseIcon.style.display = 'none';
+    }
+  }
+
+  async function startPowerHour(){
+    const pid = localStorage.getItem(K.playlist_id);
+    if(!pid){
+      runStatus.innerHTML = `<span class="warn">Create a playlist first (Step 2)</span>`;
+      return;
+    }
+
+    const tracksData = localStorage.getItem(K.playlist_tracks);
+    if(tracksData) playlistTracks = JSON.parse(tracksData);
+
+    totalTracks = parseInt(totalTracksInput.value) || 60;
+    secondsPerTrack = parseInt(secondsPerTrackInput.value) || 30;
+    currentRound = 1;
+    timeLeft = secondsPerTrack;
+    isPlaying = true;
+    
+    updateDisplay();
+    updatePlayPauseIcon();
+    runStatus.innerHTML = '<span class="ok">Playing...</span>';
+
+    try{
+      await ensureDeviceAndStart(pid);
+    }catch(e){
+      runStatus.innerHTML = `<span class="warn">Playback control unavailable. Use "Open in Spotify"</span>`;
+    }
+
+    stopTimer();
+    intervalId = setInterval(async ()=>{
+      timeLeft--;
+      
+      if(timeLeft === 10 && beepOnReveal.checked){
+        // Optional: play beep sound here
+      }
+
+      if(timeLeft <= 0){
+        currentRound++;
+        if(currentRound > totalTracks){
+          stopTimer();
+          runStatus.innerHTML = '<span class="ok">Complete!</span>';
+          return;
+        }
+        timeLeft = secondsPerTrack;
+        await skipToNext();
+      }
+      
+      updateDisplay();
+    }, 1000);
+  }
+
+  function stopPowerHour(){
+    stopTimer();
+    currentRound = 1;
+    timeLeft = parseInt(secondsPerTrackInput.value) || 30;
+    updateDisplay();
+    runStatus.textContent = "Paused.";
+  }
+
+  function togglePlayPause(){
+    if(isPlaying){
+      stopTimer();
+      runStatus.textContent = "Paused.";
+    } else {
+      if(currentRound === 0 || !intervalId){
+        startPowerHour();
+      } else {
+        isPlaying = true;
+        updatePlayPauseIcon();
+        runStatus.innerHTML = '<span class="ok">Playing...</span>';
+        intervalId = setInterval(async ()=>{
+          timeLeft--;
+          if(timeLeft === 10 && beepOnReveal.checked){
+            // Optional: play beep
+          }
+          if(timeLeft <= 0){
+            currentRound++;
+            if(currentRound > totalTracks){
+              stopTimer();
+              runStatus.innerHTML = '<span class="ok">Complete!</span>';
+              return;
+            }
+            timeLeft = secondsPerTrack;
+            await skipToNext();
+          }
+          updateDisplay();
+        }, 1000);
+      }
+    }
+  }
+
+  async function previousTrack(){
+    if(currentRound > 1){
+      currentRound--;
+      timeLeft = secondsPerTrack;
+      updateDisplay();
+      const token = await getAccessToken();
+      await fetch(`https://api.spotify.com/v1/me/player/previous`, {
+        method:"POST",
+        headers:{ Authorization:`Bearer ${token}` }
+      }).catch(()=>{});
+    }
+  }
+
+  async function nextTrack(){
+    if(currentRound < totalTracks){
+      currentRound++;
+      timeLeft = secondsPerTrack;
+      updateDisplay();
+      await skipToNext();
+    }
+  }
+
+  // ===== WEB PLAYBACK SDK =====
+  window.onSpotifyWebPlaybackSDKReady = () => {
+    const player = new Spotify.Player({
+      name: "Power Hour Web Player",
+      getOAuthToken: async cb => cb(await getAccessToken()),
+      volume: 0.8
+    });
+    player.addListener('ready', ({ device_id }) => { playerDeviceId = device_id; });
+    player.addListener('not_ready', () => { playerDeviceId = null; });
+    player.connect();
+  };
+
+  // ===== EVENT LISTENERS =====
+  loginBtn.addEventListener("click", beginLogin);
+  logoutBtn.addEventListener("click", logout);
+  createBtn.addEventListener("click", buildPlaylist);
+  startBtn.addEventListener("click", startPowerHour);
+  stopBtn.addEventListener("click", stopPowerHour);
+  playPauseBtn.addEventListener("click", togglePlayPause);
+  prevBtn.addEventListener("click", previousTrack);
+  nextBtn.addEventListener("click", nextTrack);
+
+  // ===== INITIALIZATION =====
   (async function init(){
     try{
       const params = new URLSearchParams(window.location.search);
       const code = params.get("code");
       const error = params.get("error");
+      
       if(error) throw new Error(error);
       if(code){
-        authStatus.textContent = "Completing login…";
+        authStatus.textContent = "Completing login...";
         await exchangeCodeForToken(code);
       }
+      
       const s = session();
       if(s.access_token){
         try{
           await refreshIfNeeded();
-          const me = await fetchMe();
-          updateUI(true, me); // 2c
+          await fetchMe();
+          updateUI(true);
         }catch(e){
           clearSession();
           updateUI(false);
         }
-      }else{
-        updateUI(false);
-      }
-    }catch(err){
-      authStatus.innerHTML = `<span class="bad">Auth error:</span> ${escapeHtml(err.message||err)}`;
-      updateUI(false);
-    }
-  })();
-  </script>
-</body>
-</html>
