@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Power Hour (Spotify)</title>
   <meta name="theme-color" content="#0b0f14" />
-  <!-- IMPORTANT: relative path for project URLs -->
+  <!-- Relative path so it works at /power-hour-app/ -->
   <link rel="manifest" href="./manifest.json" />
   <style>
     :root{
@@ -219,10 +219,10 @@
   // ===== CONFIG =====
   const SPOTIFY_CLIENT_ID = "8fc1832fa4174a4f91be79ec44113742";
 
-  // Use a redirect URI that works on GitHub Pages *and* locally.
-  // Spotify requires exact whitelisted URLs; add both of these in your app settings:
+  // Works on GitHub Pages project URL and locally.
+  // Make sure BOTH are whitelisted in Spotify app settings:
   // - https://aatopini.github.io/power-hour-app/
-  // - http://localhost:8080/   (or whatever you use locally)
+  // - http://localhost:8080/  (or your local port)
   const REDIRECT_URI = window.location.origin + window.location.pathname.replace(/index\.html?$/,'');
 
   const SCOPES = [
@@ -280,6 +280,14 @@
     const enc = new TextEncoder();
     const hash = await crypto.subtle.digest("SHA-256", enc.encode(str));
     return new Uint8Array(hash);
+  }
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
   }
 
   function saveSession({access_token, refresh_token, expires_in}){
@@ -343,7 +351,7 @@
       client_id:SPOTIFY_CLIENT_ID, code_verifier
     });
     saveSession(tok);
-    // remove ?code=... from the URL without changing path
+    // remove ?code=... without changing path
     history.replaceState({}, "", window.location.pathname);
   }
 
@@ -389,6 +397,7 @@
   }
 
   // ===== PLAYLIST BUILDING =====
+
   function parseYears(s){
     if(!s) return {};
     const m = String(s).trim().match(/(\d{4})(?:\D+(\d{2,4}))?/);
@@ -400,7 +409,7 @@
 
   async function searchTracks(q, limit=20, offset=0){
     const token = await getAccessToken();
-    const params = new URLSearchParams({ q, type:"track", limit, offset });
+    const params = new URLSearchParams({ q, type:"track", limit, offset, market: "from_token" });
     const r = await fetch(`https://api.spotify.com/v1/search?${params}`, {
       headers:{ Authorization:`Bearer ${token}` }
     });
@@ -415,43 +424,84 @@
       const me = await fetchMe();
       const name = playlistName.value.trim() || `Power Hour — ${new Date().toLocaleDateString()}`;
       const {start,end} = parseYears(eraInput.value);
-      const genre = genreInput.value.trim();
+      const genre = (genreInput.value || "").trim();
 
-      const parts = [];
-      if(genre) parts.push(`genre:"${genre}"`);
-      if(start && end) parts.push(`year:${start}-${end}`);
-      else if(start) parts.push(`year:${start}`);
-      parts.push(`tag:hipster OR tag:new`);
-      const baseQ = parts.join(" ");
+      // Candidate queries, specific → broad (no tags)
+      const queries = [];
 
-      let pool = [];
-      for(let off=0; off<200 && pool.length<120; off+=20){
-        const chunk = await searchTracks(baseQ, 20, off);
-        pool = pool.concat(chunk);
-        if(chunk.length<20) break;
+      if (genre && start && end) {
+        queries.push(`genre:"${genre}" year:${start}-${end}`);
+        queries.push(`${genre} year:${start}-${end}`); // plain text fallback
       }
-      
-      const chosen = pool.slice(0,60);
-      if(chosen.length<10) throw new Error("Not enough tracks found. Try different genre/years.");
+      if (genre && start && !end) {
+        queries.push(`genre:"${genre}" year:${start}`);
+        queries.push(`${genre} year:${start}`);
+      }
+      if (genre && !start && !end) {
+        queries.push(`genre:"${genre}"`);
+        queries.push(`${genre}`);
+      }
+      if (!genre && (start || end)) {
+        const yr = start && end ? `${start}-${end}` : start ? `${start}` : "";
+        if (yr) queries.push(`year:${yr}`);
+      }
+      if (queries.length === 0) {
+        queries.push("year:1990-2025"); // safety net
+      }
 
+      // Gather a pool of unique tracks
+      const poolMap = new Map(); // id → track
+      for (const q of queries) {
+        for (let off = 0; off < 400; off += 50) { // up to ~400 results per query
+          const chunk = await searchTracks(q, 50, off);
+          for (const t of chunk) {
+            if (t && t.id && !poolMap.has(t.id)) {
+              poolMap.set(t.id, t);
+            }
+          }
+          if (chunk.length < 50) break;   // end of pages
+          if (poolMap.size >= 180) break; // enough variety
+        }
+        if (poolMap.size >= 80) break;    // good enough; move on
+      }
+
+      if (poolMap.size < 60) {
+        // final broad fallback
+        for (let off = 0; off < 400 && poolMap.size < 80; off += 50) {
+          const chunk = await searchTracks("year:1990-2025", 50, off);
+          for (const t of chunk) if (t && t.id && !poolMap.has(t.id)) poolMap.set(t.id, t);
+          if (chunk.length < 50) break;
+        }
+      }
+
+      const finalPool = Array.from(poolMap.values());
+      if (finalPool.length < 10) {
+        throw new Error("Not enough tracks found. Try a broader genre or widen the year range.");
+      }
+
+      // Shuffle to diversify artists; then take 60
+      shuffle(finalPool);
+      const chosen = finalPool.slice(0, 60);
+
+      // Create the playlist and add tracks
       const created = await api(`/users/${me.id}/playlists`, {
         method:"POST",
         body: JSON.stringify({ name, description:"Power Hour auto-generated", public: false })
       });
 
-      const uris = chosen.map(t=>`spotify:track:${t.id}`);
-      for(let i=0;i<uris.length;i+=100){
+      const uris = chosen.map(t => `spotify:track:${t.id}`);
+      for (let i = 0; i < uris.length; i += 100) {
         await api(`/playlists/${created.id}/tracks`, {
           method:"POST",
-          body: JSON.stringify({ uris: uris.slice(i,i+100) })
+          body: JSON.stringify({ uris: uris.slice(i, i+100) })
         });
       }
 
-      // Store playlist info
+      // Store lightweight track info for display
       localStorage.setItem(K.playlist_id, created.id);
-      localStorage.setItem(K.playlist_tracks, JSON.stringify(chosen.map(t=>({
+      localStorage.setItem(K.playlist_tracks, JSON.stringify(chosen.map(t => ({
         name: t.name,
-        artist: t.artists[0]?.name || "Unknown"
+        artist: t.artists?.[0]?.name || "Unknown"
       }))));
 
       openSpotifyBtn.onclick = () => window.open(`https://open.spotify.com/playlist/${created.id}`, '_blank');
