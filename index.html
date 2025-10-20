@@ -546,30 +546,37 @@
     }
   }
 
-  async function ensureDeviceAndStart(playlistId){
-    const token = await getAccessToken();
-    if(playerDeviceId){
-      await fetch(`https://api.spotify.com/v1/me/player`, {
-        method:"PUT",
-        headers:{ "Authorization":`Bearer ${token}`, "Content-Type":"application/json" },
-        body: JSON.stringify({ device_ids:[playerDeviceId], play:true })
-      }).catch(()=>{});
-    }
-    await fetch(`https://api.spotify.com/v1/me/player/play`, {
-      method:"PUT",
-      headers:{ "Authorization":`Bearer ${token}`, "Content-Type":"application/json" },
-      body: JSON.stringify({ context_uri:`spotify:playlist:${playlistId}` })
+// Start playback on the selected device from the *beginning* of the playlist
+async function ensureDeviceAndStartFromBeginning(playlistId){
+  const token = await getAccessToken();
+
+  // If we know the Web Playback SDK device, transfer playback to it and start
+  if (playerDeviceId) {
+    await fetch(`https://api.spotify.com/v1/me/player`, {
+      method: "PUT",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ device_ids: [playerDeviceId], play: true })
     }).catch(()=>{});
   }
 
-  async function skipToNext(){
-    const token = await getAccessToken();
-    await fetch(`https://api.spotify.com/v1/me/player/next`, { 
-      method:"POST", 
-      headers:{ Authorization:`Bearer ${token}` }
-    }).catch(()=>{});
-  }
-
+  // Explicitly start the playlist at the first track, position 0ms
+  await fetch(`https://api.spotify.com/v1/me/player/play`, {
+    method: "PUT",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      context_uri: `spotify:playlist:${playlistId}`,
+      offset: { position: 0 },  // first track
+      position_ms: 0            // at the beginning
+    })
+  }).catch(()=>{});
+}
+    
   function stopTimer(){
     if(intervalId){
       clearInterval(intervalId);
