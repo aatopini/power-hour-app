@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Power Hour (Spotify)</title>
   <meta name="theme-color" content="#0b0f14" />
-  <!-- Relative path so it works at /power-hour-app/ -->
   <link rel="manifest" href="./manifest.json" />
   <style>
     :root{
@@ -150,9 +149,8 @@
 
         <div class="row">
           <button id="startBtn" class="primary">Start</button>
-          <button id="stopBtn" class="secondary">Stop</button>
         </div>
-        <div id="runStatus" class="status">Paused.</div>
+        <div id="runStatus" class="status">Ready to start.</div>
       </section>
     </aside>
 
@@ -190,7 +188,8 @@
           </div>
         </div>
 
-        <!-- Playback Controls -->
+        <!-- Playback Controls - COMMENTED OUT -->
+        <!--
         <div class="controls">
           <button class="control-btn" id="prevBtn" title="Previous">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
@@ -211,6 +210,7 @@
             </svg>
           </button>
         </div>
+        -->
       </div>
     </main>
   </div>
@@ -218,11 +218,6 @@
   <script>
   // ===== CONFIG =====
   const SPOTIFY_CLIENT_ID = "8fc1832fa4174a4f91be79ec44113742";
-
-  // Works on GitHub Pages project URL and locally.
-  // Make sure BOTH are whitelisted in Spotify app settings:
-  // - https://aatopini.github.io/power-hour-app/
-  // - http://localhost:8080/  (or your local port)
   const REDIRECT_URI = window.location.origin + window.location.pathname.replace(/index\.html?$/,'');
 
   const SCOPES = [
@@ -243,7 +238,6 @@
   const openSpotifyBtn = document.getElementById("openSpotifyBtn");
   const buildStatus = document.getElementById("buildStatus");
   const startBtn = document.getElementById("startBtn");
-  const stopBtn = document.getElementById("stopBtn");
   const runStatus = document.getElementById("runStatus");
   const totalTracksInput = document.getElementById("totalTracks");
   const secondsPerTrackInput = document.getElementById("secondsPerTrack");
@@ -251,12 +245,14 @@
   const trackInfo = document.getElementById("trackInfo");
   const roundDisplay = document.getElementById("roundDisplay");
   const timeDisplay = document.getElementById("timeDisplay");
-  const playPauseBtn = document.getElementById("playPauseBtn");
-  const playIcon = document.getElementById("playIcon");
-  const pauseIcon = document.getElementById("pauseIcon");
-  const prevBtn = document.getElementById("prevBtn");
-  const nextBtn = document.getElementById("nextBtn");
   const beepOnReveal = document.getElementById("beepOnReveal");
+  
+  // COMMENTED OUT - Control buttons
+  // const playPauseBtn = document.getElementById("playPauseBtn");
+  // const playIcon = document.getElementById("playIcon");
+  // const pauseIcon = document.getElementById("pauseIcon");
+  // const prevBtn = document.getElementById("prevBtn");
+  // const nextBtn = document.getElementById("nextBtn");
 
   // ===== STORAGE KEYS =====
   const K = {
@@ -317,18 +313,6 @@
     logoutBtn.disabled = !authenticated;
   }
 
-async function pausePlayback(){
-  const token = await getAccessToken();
-  try {
-    await fetch(`https://api.spotify.com/v1/me/player/pause`, {
-      method: "PUT",
-      headers: { Authorization: `Bearer ${token}` }
-    });
-  } catch (_) {
-    // ignore; device might already be paused/not active
-  }
-}
-
   // ===== AUTH FLOW =====
   async function beginLogin(){
     const code_verifier = b64url(crypto.getRandomValues(new Uint8Array(64)));
@@ -363,7 +347,6 @@ async function pausePlayback(){
       client_id:SPOTIFY_CLIENT_ID, code_verifier
     });
     saveSession(tok);
-    // remove ?code=... without changing path
     history.replaceState({}, "", window.location.pathname);
   }
 
@@ -408,42 +391,39 @@ async function pausePlayback(){
     stopTimer();
   }
 
-    async function getDevices() {
-  const token = await getAccessToken();
-  const r = await fetch("https://api.spotify.com/v1/me/player/devices", {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!r.ok) throw new Error(`devices ${r.status}`);
-  const j = await r.json();
-  return j.devices || [];
-}
+  async function getDevices() {
+    const token = await getAccessToken();
+    const r = await fetch("https://api.spotify.com/v1/me/player/devices", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!r.ok) throw new Error(`devices ${r.status}`);
+    const j = await r.json();
+    return j.devices || [];
+  }
 
-async function transferPlayback(deviceIds, play=true) {
-  const token = await getAccessToken();
-  await fetch("https://api.spotify.com/v1/me/player", {
-    method: "PUT",
-    headers: { "Authorization": `Bearer ${token}`, "Content-Type":"application/json" },
-    body: JSON.stringify({ device_ids: deviceIds, play })
-  });
-}
+  async function transferPlayback(deviceIds, play=true) {
+    const token = await getAccessToken();
+    await fetch("https://api.spotify.com/v1/me/player", {
+      method: "PUT",
+      headers: { "Authorization": `Bearer ${token}`, "Content-Type":"application/json" },
+      body: JSON.stringify({ device_ids: deviceIds, play })
+    });
+  }
 
-// wait up to `ms` for the Web SDK to report a device_id
-function waitForPlayerDeviceId(ms=4000) {
-  return new Promise(resolve => {
-    if (playerDeviceId) return resolve(playerDeviceId);
-    const start = Date.now();
-    const t = setInterval(() => {
-      if (playerDeviceId || Date.now() - start > ms) {
-        clearInterval(t);
-        resolve(playerDeviceId || null);
-      }
-    }, 100);
-  });
-}
-
+  function waitForPlayerDeviceId(ms=4000) {
+    return new Promise(resolve => {
+      if (playerDeviceId) return resolve(playerDeviceId);
+      const start = Date.now();
+      const t = setInterval(() => {
+        if (playerDeviceId || Date.now() - start > ms) {
+          clearInterval(t);
+          resolve(playerDeviceId || null);
+        }
+      }, 100);
+    });
+  }
 
   // ===== PLAYLIST BUILDING =====
-
   function parseYears(s){
     if(!s) return {};
     const m = String(s).trim().match(/(\d{4})(?:\D+(\d{2,4}))?/);
@@ -472,12 +452,11 @@ function waitForPlayerDeviceId(ms=4000) {
       const {start,end} = parseYears(eraInput.value);
       const genre = (genreInput.value || "").trim();
 
-      // Candidate queries, specific → broad (no tags)
       const queries = [];
 
       if (genre && start && end) {
         queries.push(`genre:"${genre}" year:${start}-${end}`);
-        queries.push(`${genre} year:${start}-${end}`); // plain text fallback
+        queries.push(`${genre} year:${start}-${end}`);
       }
       if (genre && start && !end) {
         queries.push(`genre:"${genre}" year:${start}`);
@@ -492,27 +471,25 @@ function waitForPlayerDeviceId(ms=4000) {
         if (yr) queries.push(`year:${yr}`);
       }
       if (queries.length === 0) {
-        queries.push("year:1990-2025"); // safety net
+        queries.push("year:1990-2025");
       }
 
-      // Gather a pool of unique tracks
-      const poolMap = new Map(); // id → track
+      const poolMap = new Map();
       for (const q of queries) {
-        for (let off = 0; off < 400; off += 50) { // up to ~400 results per query
+        for (let off = 0; off < 400; off += 50) {
           const chunk = await searchTracks(q, 50, off);
           for (const t of chunk) {
             if (t && t.id && !poolMap.has(t.id)) {
               poolMap.set(t.id, t);
             }
           }
-          if (chunk.length < 50) break;   // end of pages
-          if (poolMap.size >= 180) break; // enough variety
+          if (chunk.length < 50) break;
+          if (poolMap.size >= 180) break;
         }
-        if (poolMap.size >= 80) break;    // good enough; move on
+        if (poolMap.size >= 80) break;
       }
 
       if (poolMap.size < 60) {
-        // final broad fallback
         for (let off = 0; off < 400 && poolMap.size < 80; off += 50) {
           const chunk = await searchTracks("year:1990-2025", 50, off);
           for (const t of chunk) if (t && t.id && !poolMap.has(t.id)) poolMap.set(t.id, t);
@@ -525,11 +502,9 @@ function waitForPlayerDeviceId(ms=4000) {
         throw new Error("Not enough tracks found. Try a broader genre or widen the year range.");
       }
 
-      // Shuffle to diversify artists; then take 60
       shuffle(finalPool);
       const chosen = finalPool.slice(0, 60);
 
-      // Create the playlist and add tracks
       const created = await api(`/users/${me.id}/playlists`, {
         method:"POST",
         body: JSON.stringify({ name, description:"Power Hour auto-generated", public: false })
@@ -543,7 +518,6 @@ function waitForPlayerDeviceId(ms=4000) {
         });
       }
 
-      // Store lightweight track info for display
       localStorage.setItem(K.playlist_id, created.id);
       localStorage.setItem(K.playlist_tracks, JSON.stringify(chosen.map(t => ({
         name: t.name,
@@ -580,7 +554,6 @@ function waitForPlayerDeviceId(ms=4000) {
     timeDisplay.textContent = timeLeft;
     updateProgressRing();
     
-    // Show track info in last 10 seconds
     if(timeLeft <= 10 && playlistTracks.length > 0){
       const trackIdx = (currentRound - 1) % playlistTracks.length;
       const track = playlistTracks[trackIdx];
@@ -592,56 +565,61 @@ function waitForPlayerDeviceId(ms=4000) {
     }
   }
 
-// Start playback on the selected device from the *beginning* of the playlist
-// Robust: pick a target device, transfer, and start playlist at track 1 / 0:00
-async function ensureDeviceAndStartFromBeginning(playlistId) {
-  const token = await getAccessToken();
-
-  // 1) Give the Web Playback SDK a moment to become ready
-  const webDeviceId = await waitForPlayerDeviceId(5000);
-
-  // 2) Inspect devices; prefer our web device, otherwise any active device
-  let devices = await getDevices();
-  let targetId = null;
-
-  // prefer our web player if present
-  if (webDeviceId && devices.some(d => d.id === webDeviceId)) {
-    targetId = webDeviceId;
-  } else {
-    // otherwise pick an active device (phone/desktop/web)
-    const active = devices.find(d => d.is_active) || devices[0];
-    if (active) targetId = active.id;
+  function stopTimer(){
+    if(intervalId){
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    isPlaying = false;
   }
 
-  // If still no device, ask the user to open Spotify and play any track for a second
-  if (!targetId) {
-    throw new Error("No active Spotify device found. Open Spotify (app or web), press play once, then hit Start again.");
+  async function skipToNext(){
+    const token = await getAccessToken();
+    try{
+      await fetch(`https://api.spotify.com/v1/me/player/next`, {
+        method:"POST",
+        headers:{ Authorization:`Bearer ${token}` }
+      });
+    }catch(e){}
   }
 
-  // 3) Transfer playback to the target and ensure it's playing state
-  try { await transferPlayback([targetId], true); } catch {}
+  async function ensureDeviceAndStartFromBeginning(playlistId) {
+    const token = await getAccessToken();
+    const webDeviceId = await waitForPlayerDeviceId(5000);
+    let devices = await getDevices();
+    let targetId = null;
 
-  // 4) Start playlist at the beginning with an explicit offset & position
-  const body = {
-    context_uri: `spotify:playlist:${playlistId}`,
-    offset: { position: 0 },
-    position_ms: 0
-  };
+    if (webDeviceId && devices.some(d => d.id === webDeviceId)) {
+      targetId = webDeviceId;
+    } else {
+      const active = devices.find(d => d.is_active) || devices[0];
+      if (active) targetId = active.id;
+    }
 
-  // Retry a couple of times if the first call races the device becoming active
-  for (let i = 0; i < 3; i++) {
-    const res = await fetch("https://api.spotify.com/v1/me/player/play", {
-      method: "PUT",
-      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
-    if (res.ok) return;
-    await new Promise(r => setTimeout(r, 600)); // brief backoff
+    if (!targetId) {
+      throw new Error("No active Spotify device found. Open Spotify (app or web), press play once, then hit Start again.");
+    }
+
+    try { await transferPlayback([targetId], true); } catch {}
+
+    const body = {
+      context_uri: `spotify:playlist:${playlistId}`,
+      offset: { position: 0 },
+      position_ms: 0
+    };
+
+    for (let i = 0; i < 3; i++) {
+      const res = await fetch("https://api.spotify.com/v1/me/player/play", {
+        method: "PUT",
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) return;
+      await new Promise(r => setTimeout(r, 600));
+    }
+
+    throw new Error('Could not start playback on any device.');
   }
-
-  throw new Error('Could not start playback on any device.');
-}
-
 
   async function startPowerHour(){
     const pid = localStorage.getItem(K.playlist_id);
@@ -660,13 +638,14 @@ async function ensureDeviceAndStartFromBeginning(playlistId) {
     isPlaying = true;
     
     updateDisplay();
-    updatePlayPauseIcon();
     runStatus.innerHTML = '<span class="ok">Playing...</span>';
 
     try{
-      await ensureDeviceAndStart(pid);
+      await ensureDeviceAndStartFromBeginning(pid);
     }catch(e){
-      runStatus.innerHTML = `<span class="warn">Playback control unavailable. Use "Open in Spotify"</span>`;
+      runStatus.innerHTML = `<span class="warn">${escapeHtml(e.message)}</span>`;
+      stopTimer();
+      return;
     }
 
     stopTimer();
@@ -692,146 +671,19 @@ async function ensureDeviceAndStartFromBeginning(playlistId) {
     }, 1000);
   }
 
-function stopPowerHour(){
-  // stop the countdown loop
-  stopTimer();
-
-  // pause Spotify playback
-  pausePlayback();
-
-  // reset round/time to "fresh start" state
-  currentRound = 1;
-  secondsPerTrack = parseInt(secondsPerTrackInput.value) || 30;
-  timeLeft = secondsPerTrack;
-
-  // reset track-info UI
-  trackInfo.classList.add('blurred');
-  trackInfo.querySelector('.track-text').textContent = "Hidden Track Title — Artist Name";
-
-  // reset flags & icons
-  isPlaying = false;
-  updatePlayPauseIcon();
-
-  // reflect on-screen
-  updateDisplay();
-  runStatus.textContent = "Ready.";
-}
+  // COMMENTED OUT - Play/Pause toggle functionality
+  /*
+  function updatePlayPauseIcon(){
+    if(isPlaying){
+      playIcon.style.display = 'none';
+      pauseIcon.style.display = 'block';
+    } else {
+      playIcon.style.display = 'block';
+      pauseIcon.style.display = 'none';
+    }
+  }
 
   function togglePlayPause(){
     if(isPlaying){
       stopTimer();
-      runStatus.textContent = "Paused.";
-    } else {
-      if(currentRound === 0 || !intervalId){
-        startPowerHour();
-      } else {
-        isPlaying = true;
-        updatePlayPauseIcon();
-        runStatus.innerHTML = '<span class="ok">Playing...</span>';
-        intervalId = setInterval(async ()=>{
-          timeLeft--;
-          if(timeLeft === 10 && beepOnReveal.checked){
-            // Optional: play beep
-          }
-          if(timeLeft <= 0){
-            currentRound++;
-            if(currentRound > totalTracks){
-              stopTimer();
-              runStatus.innerHTML = '<span class="ok">Complete!</span>';
-              return;
-            }
-            timeLeft = secondsPerTrack;
-            await skipToNext();
-          }
-          updateDisplay();
-        }, 1000);
-      }
-    }
-  }
-
-  async function previousTrack(){
-    if(currentRound > 1){
-      currentRound--;
-      timeLeft = secondsPerTrack;
-      updateDisplay();
-      const token = await getAccessToken();
-      await fetch(`https://api.spotify.com/v1/me/player/previous`, {
-        method:"POST",
-        headers:{ Authorization:`Bearer ${token}` }
-      }).catch(()=>{});
-    }
-  }
-
-  async function nextTrack(){
-    if(currentRound < totalTracks){
-      currentRound++;
-      timeLeft = secondsPerTrack;
-      updateDisplay();
-      await skipToNext();
-    }
-  }
-
-  // ===== WEB PLAYBACK SDK =====
-  window.onSpotifyWebPlaybackSDKReady = () => {
-    const player = new Spotify.Player({
-      name: "Power Hour Web Player",
-      getOAuthToken: async cb => cb(await getAccessToken()),
-      volume: 0.8
-    });
-    player.addListener('ready', ({ device_id }) => { playerDeviceId = device_id; });
-    player.addListener('not_ready', () => { playerDeviceId = null; });
-    player.connect();
-  };
-
-  // ===== EVENT LISTENERS =====
-  loginBtn.addEventListener("click", beginLogin);
-  logoutBtn.addEventListener("click", logout);
-  createBtn.addEventListener("click", buildPlaylist);
-  startBtn.addEventListener("click", startPowerHour);
-  stopBtn.addEventListener("click", stopPowerHour);
-  playPauseBtn.addEventListener("click", togglePlayPause);
-  prevBtn.addEventListener("click", previousTrack);
-  nextBtn.addEventListener("click", nextTrack);
-
-  // ===== INITIALIZATION =====
-  (async function init(){
-    try{
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get("code");
-      const error = params.get("error");
       
-      if(error) throw new Error(error);
-      if(code){
-        authStatus.textContent = "Completing login...";
-        await exchangeCodeForToken(code);
-      }
-      
-      const s = session();
-      if(s.access_token){
-        try{
-          await refreshIfNeeded();
-          await fetchMe();
-          updateUI(true);
-        }catch(e){
-          clearSession();
-          updateUI(false);
-        }
-      } else {
-        updateUI(false);
-      }
-
-      // Register service worker with relative scope for project URL
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(console.error);
-        });
-      }
-    }catch(e){
-      console.error(e);
-      authStatus.innerHTML = `<span class="bad">Error: ${escapeHtml(e.message||e)}</span>`;
-      updateUI(false);
-    }
-  })();
-  </script>
-</body>
-</html>
