@@ -1,613 +1,591 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Power Hour - Spotify Game</title>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Power Hour - Spotify Game</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body>
-  <div id="root"></div>
+    <div id="root"></div>
 
-  <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
 
-    // ---------- PKCE helpers ----------
-    function generateRandomString(length) {
-      const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-      const values = crypto.getRandomValues(new Uint8Array(length));
-      return values.reduce((acc, x) => acc + possible[x % possible.length], "");
-    }
-    async function sha256(plain) {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(plain);
-      return window.crypto.subtle.digest('SHA-256', data);
-    }
-    function base64encode(input) {
-      return btoa(String.fromCharCode(...new Uint8Array(input)))
-        .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-    }
-
-    // ---------- Icons ----------
-    const PlayIcon = () => (
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-      </svg>
-    );
-    const PauseIcon = () => (
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="6" y="4" width="4" height="16"></rect>
-        <rect x="14" y="4" width="4" height="16"></rect>
-      </svg>
-    );
-    const MusicIcon = () => (
-      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 18V5l12-2v13"></path>
-        <circle cx="6" cy="18" r="3"></circle>
-        <circle cx="18" cy="16" r="3"></circle>
-      </svg>
-    );
-
-    // ---------- Background ----------
-    const SpaceyBackground = () => (
-      <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-blue-900 to-black overflow-hidden">
-        <div className="absolute top-20 left-20 w-96 h-96 bg-purple-500 rounded-full blur-3xl opacity-30 animate-pulse"></div>
-        <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-500 rounded-full blur-3xl opacity-30 animate-pulse" style={{animationDelay: '1s'}}></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-pink-500 rounded-full blur-3xl opacity-20 animate-pulse" style={{animationDelay: '2s'}}></div>
-        <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-indigo-500 rounded-full blur-3xl opacity-25 animate-pulse" style={{animationDelay: '0.5s'}}></div>
-      </div>
-    );
-
-    // ---------- Safe JSON parsing & diagnostics ----------
-    async function readJsonSafe(res) {
-      const url = res.url || '';
-      const status = `${res.status} ${res.statusText}`;
-      let text = '';
-      try { text = await res.text(); } catch { text = ''; }
-      if (!text) return { __meta: { url, status, empty: true } };
-      try {
-        const json = JSON.parse(text);
-        return { ...json, __meta: { url, status } };
-      } catch {
-        return { raw: text, __meta: { url, status, nonJson: true } };
-      }
-    }
-    function alertApiError(what, res, data) {
-      const where = data?.__meta?.url ? `\nEndpoint: ${data.__meta.url}` : '';
-      const status = data?.__meta?.status || (res ? `${res.status} ${res.statusText}` : '');
-      const msg = (data?.error && (data.error.message || data.error)) || data?.error_description || data?.raw || 'Unknown error';
-      alert(`${what} failed: ${status}${where}\n${msg}`);
-      console.error(`${what} error`, { res, data });
-    }
-
-    // ---------- Built-in fallback for genre seeds ----------
-    const FALLBACK_SEEDS = [
-      'acoustic','afrobeat','alt-rock','alternative','ambient','bluegrass','blues','brazil','breakbeat','british',
-      'chill','classical','club','comedy','country','dance','dancehall','death-metal','deep-house','detroit-techno',
-      'disco','disney','drum-and-bass','dub','dubstep','edm','electro','electronic','emo','folk','french','funk',
-      'garage','german','gospel','goth','grindcore','grunge','happy','hard-rock','hardcore','hardstyle','heavy-metal',
-      'hip-hop','holidays','honky-tonk','house','idm','indie','indie-pop','industrial','iranian','jazz','k-pop','kids',
-      'latin','latino','malay','mandopop','metal','metalcore','minimal-techno','movies','mpb','new-age','opera',
-      'pagode','party','piano','pop','punk','punk-rock','r-n-b','rainy-day','reggae','reggaeton','road-trip','rock',
-      'rock-n-roll','rockabilly','romance','sad','salsa','samba','sertanejo','show-tunes','singer-songwriter','ska',
-      'sleep','soul','soundtracks','spanish','study','summer','synth-pop','tango','techno','trance','trip-hop',
-      'turkish','work-out','world-music'
-    ];
-
-    function PowerHourGame() {
-      const [step, setStep] = useState(1);
-      const [spotifyToken, setSpotifyToken] = useState(null);
-      const [deviceId, setDeviceId] = useState(null);
-      const [player, setPlayer] = useState(null);
-
-      const [playlistCriteria, setPlaylistCriteria] = useState({ genre: '', timePeriod: '', difficulty: 1 });
-      const [playlist, setPlaylist] = useState([]);
-      const [gameSettings, setGameSettings] = useState({ rounds: 60, roundLength: 60 });
-
-      const [isPlaying, setIsPlaying] = useState(false);
-      const [currentRound, setCurrentRound] = useState(0);
-      const [timeLeft, setTimeLeft] = useState(0);
-      const [currentTrack, setCurrentTrack] = useState(null);
-      const timerRef = useRef(null);
-
-      const CLIENT_ID = '8fc1832fa4174a4f91be79ec44113742';
-      const REDIRECT_URI = 'https://aatopini.github.io/power-hour-app/';
-      const SCOPES = 'streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state playlist-read-private';
-
-      // ----- Auth -----
-      const handleSpotifyLogin = async () => {
-        const codeVerifier = generateRandomString(64);
-        const hashed = await sha256(codeVerifier);
-        const codeChallenge = base64encode(hashed);
-        window.localStorage.setItem('code_verifier', codeVerifier);
-
-        const authUrl = new URL("https://accounts.spotify.com/authorize");
-        const params = {
-          response_type: 'code',
-          client_id: CLIENT_ID,
-          scope: SCOPES,
-          code_challenge_method: 'S256',
-          code_challenge: codeChallenge,
-          redirect_uri: REDIRECT_URI,
-        };
-        authUrl.search = new URLSearchParams(params).toString();
-        window.location.href = authUrl.toString();
-      };
-
-      const getAccessToken = async (code) => {
-        const codeVerifier = window.localStorage.getItem('code_verifier');
-        const res = await fetch('https://accounts.spotify.com/api/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
-          body: new URLSearchParams({
-            client_id: CLIENT_ID,
-            grant_type: 'authorization_code',
-            code,
-            redirect_uri: REDIRECT_URI,
-            code_verifier: codeVerifier,
-          }),
-        });
-        const data = await readJsonSafe(res);
-        if (!res.ok) { alertApiError('Get access token', res, data); throw new Error('token'); }
-        return data.access_token;
-      };
-
-      useEffect(() => {
-        const args = new URLSearchParams(window.location.search);
-        const code = args.get('code');
-        if (code) {
-          getAccessToken(code).then(token => {
-            setSpotifyToken(token);
-            window.localStorage.removeItem('code_verifier');
-            window.history.replaceState({}, document.title, REDIRECT_URI);
-          }).catch(() => {});
+        // PKCE helper functions
+        function generateRandomString(length) {
+            const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            const values = crypto.getRandomValues(new Uint8Array(length));
+            return values.reduce((acc, x) => acc + possible[x % possible.length], "");
         }
-      }, []);
 
-      // ----- Web Playback SDK -----
-      useEffect(() => {
-        if (spotifyToken && !player) {
-          const script = document.createElement('script');
-          script.src = 'https://sdk.scdn.co/spotify-player.js';
-          script.async = true;
-
-          window.onSpotifyWebPlaybackSDKReady = () => {
-            const spotifyPlayer = new window.Spotify.Player({
-              name: 'Power Hour Player',
-              getOAuthToken: cb => { cb(spotifyToken); },
-              volume: 0.8
-            });
-
-            spotifyPlayer.addListener('ready', async ({ device_id }) => {
-              setDeviceId(device_id);
-              try {
-                await fetch('https://api.spotify.com/v1/me/player', {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${spotifyToken}` },
-                  body: JSON.stringify({ device_ids: [device_id], play: false })
-                }); // 204 expected
-              } catch (e) { console.warn('Transfer playback failed (may be fine):', e); }
-              setStep(2);
-            });
-
-            spotifyPlayer.addListener('not_ready', ({ device_id }) => {
-              console.log('Device ID has gone offline', device_id);
-            });
-
-            spotifyPlayer.connect();
-            setPlayer(spotifyPlayer);
-          };
-
-          document.body.appendChild(script);
+        async function sha256(plain) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(plain);
+            return window.crypto.subtle.digest('SHA-256', data);
         }
-      }, [spotifyToken, player]);
 
-      // ----- Helpers for search -----
-      const normalizeGenre = (g) => (g || '').toLowerCase().trim().replace(/\s+/g, '-');
-
-      const fetchAvailableSeeds = async () => {
-        try {
-          const res = await fetch('https://api.spotify.com/v1/recommendations/available-genre-seeds', {
-            headers: { Authorization: `Bearer ${spotifyToken}`, 'Accept': 'application/json' }
-          });
-          const data = await readJsonSafe(res);
-          if (!res.ok || !Array.isArray(data.genres)) {
-            console.warn('available-genre-seeds not available, using fallback', { status: res.status, data });
-            return FALLBACK_SEEDS;
-          }
-          return (data.genres || []).map(g => g.toLowerCase());
-        } catch (e) {
-          console.warn('available-genre-seeds network error; using fallback list.', e);
-          return FALLBACK_SEEDS;
+        function base64encode(input) {
+            return btoa(String.fromCharCode(...new Uint8Array(input)))
+                .replace(/=/g, '')
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_');
         }
-      };
 
-      const getSeedArtists = async (genre) => {
-        try {
-          const res = await fetch(
-            `https://api.spotify.com/v1/search?q=${encodeURIComponent('genre:"' + genre + '"')}&type=artist&limit=5`,
-            { headers: { 'Authorization': `Bearer ${spotifyToken}`, 'Accept': 'application/json' } }
-          );
-          const data = await readJsonSafe(res);
-          if (!res.ok) { console.warn('Artist search fallback (no artists for genre).', data); return []; }
-          return (data.artists?.items || []).slice(0, 3).map(a => a.id);
-        } catch (e) { console.warn('Artist search network error:', e); return []; }
-      };
-
-      const recommendations = async (paramsObj, label = 'Recommendations') => {
-        const params = new URLSearchParams({ limit: '100', market: 'from_token', ...paramsObj });
-        const url = `https://api.spotify.com/v1/recommendations?${params.toString()}`;
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${spotifyToken}`, 'Accept': 'application/json' } });
-        const data = await readJsonSafe(res);
-        if (!res.ok) { alertApiError(label, res, data); throw new Error(label); }
-        return data.tracks || [];
-      };
-
-      // ----- Robust track search -----
-      const searchTracks = async () => {
-        if (!spotifyToken) return [];
-
-        const typedGenreRaw = playlistCriteria.genre || '';
-        const typedGenre = normalizeGenre(typedGenreRaw);
-
-        // Popularity bands
-        const difficultyMap = {
-          1: { min: 60, max: 100 },
-          2: { min: 40, max: 95 },
-          3: { min: 20, max: 85 },
-          4: { min: 5,  max: 70 },
-          5: { min: 0,  max: 50 }
-        };
-        const basePop = difficultyMap[playlistCriteria.difficulty];
-
-        // Client-side year filter
-        const applyYear = (arr) => {
-          if (!playlistCriteria.timePeriod) return arr;
-          const mRange  = playlistCriteria.timePeriod.match(/(\d{4})\s*-\s*(\d{4})/);
-          const mDecade = playlistCriteria.timePeriod.match(/(\d{4})s/);
-          const mYear   = playlistCriteria.timePeriod.match(/^(\d{4})$/);
-          let yMin = 0, yMax = 9999;
-          if (mRange)      { yMin = +mRange[1];  yMax = +mRange[2]; }
-          else if (mDecade){ yMin = +mDecade[1]; yMax = yMin + 9; }
-          else if (mYear)  { yMin = +mYear[1];   yMax = +mYear[1]; }
-          return arr.filter(t => {
-            const y = parseInt((t?.album?.release_date || '0000').slice(0,4), 10);
-            return !isNaN(y) && y >= yMin && y <= yMax;
-          });
-        };
-
-        try {
-          const seeds = await fetchAvailableSeeds();
-          let useGenre = seeds.includes(typedGenre);
-          let seedArtists = [];
-
-          if (!useGenre) {
-            seedArtists = await getSeedArtists(typedGenreRaw);
-            if (!seedArtists.length) {
-              // Last-resort fallback to a safe popular seed genre
-              const safe = ['pop','rock','indie','alternative','hip-hop','metal'].find(s => seeds.includes(s));
-              if (safe) {
-                let tracks = await recommendations({ seed_genres: safe, min_popularity: basePop.min, max_popularity: basePop.max }, 'Recommendations (fallback genre)');
-                tracks = applyYear(tracks);
-                if (!tracks.length) tracks = await recommendations({ seed_genres: safe, min_popularity: 0, max_popularity: 100 }, 'Recommendations (fallback wide)');
-                if (!tracks.length) { alert('No tracks found. Try adjusting your criteria.'); return []; }
-                const out = tracks.sort(() => Math.random() - 0.5).slice(0, Math.min(gameSettings.rounds, tracks.length));
-                setPlaylist(out);
-                return out;
-              }
-              alert('Could not find artists or a matching genre. Try a more common genre (e.g., "rock", "emo", "hip hop").');
-              return [];
-            }
-          }
-
-          // First attempt
-          let tracks = await recommendations(
-            useGenre
-              ? { seed_genres: typedGenre, min_popularity: basePop.min, max_popularity: basePop.max }
-              : { seed_artists: seedArtists.slice(0,3).join(','), min_popularity: basePop.min, max_popularity: basePop.max },
-            'Recommendations (primary)'
-          );
-          let filtered = applyYear(tracks);
-
-          // Retry: widen popularity
-          if (!filtered.length) {
-            tracks = await recommendations(
-              useGenre
-                ? { seed_genres: typedGenre, min_popularity: 0, max_popularity: 100 }
-                : { seed_artists: seedArtists.slice(0,3).join(','), min_popularity: 0, max_popularity: 100 },
-              'Recommendations (wider)'
-            );
-            filtered = applyYear(tracks);
-          }
-
-          // Retry: drop year filter if set
-          if (!filtered.length && playlistCriteria.timePeriod) filtered = tracks;
-
-          // Retry: swap seed strategy
-          if (!filtered.length) {
-            if (useGenre) {
-              const artists = await getSeedArtists(typedGenreRaw);
-              if (artists.length) {
-                filtered = await recommendations({ seed_artists: artists.slice(0,3).join(','), min_popularity: 0, max_popularity: 100 }, 'Recommendations (swap to artists)');
-              }
-            } else if (seeds.includes(typedGenre)) {
-              filtered = await recommendations({ seed_genres: typedGenre, min_popularity: 0, max_popularity: 100 }, 'Recommendations (swap to genre)');
-            }
-          }
-
-          if (!filtered.length) { alert('No tracks found. Please try different criteria.'); return []; }
-
-          const out = filtered.sort(() => Math.random() - 0.5).slice(0, Math.min(gameSettings.rounds, filtered.length));
-          setPlaylist(out);
-          return out;
-
-        } catch (e) {
-          console.error('searchTracks error:', e);
-          if (!/failed:/.test(String(e?.message || ''))) alert('Error searching for tracks. Please try again.');
-          return [];
-        }
-      };
-
-      const handleCreatePlaylist = async () => {
-        const tracks = await searchTracks();
-        if (tracks && tracks.length > 0) setStep(3);
-      };
-
-      // ----- Playback -----
-      const playTrack = async (trackUri) => {
-        if (!deviceId || !spotifyToken) return;
-        try {
-          const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${spotifyToken}` },
-            body: JSON.stringify({ uris: [trackUri] })
-          }); // 204 expected
-          if (!res.ok) {
-            const data = await readJsonSafe(res);
-            alertApiError('Play track', res, data);
-          }
-        } catch (e) { console.error('Error playing track:', e); }
-      };
-      const pausePlayback = async () => {
-        if (!deviceId || !spotifyToken) return;
-        try {
-          await fetch(`https://api.spotify.com/v1/me/player/pause?device_id=${deviceId}`, {
-            method: 'PUT',
-            headers: { 'Authorization': `Bearer ${spotifyToken}` }
-          }); // 204
-        } catch (e) { console.error('Error pausing:', e); }
-      };
-      const resumePlayback = async () => {
-        if (!deviceId || !spotifyToken) return;
-        try {
-          await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
-            method: 'PUT',
-            headers: { 'Authorization': `Bearer ${spotifyToken}` }
-          }); // 204
-        } catch (e) { console.error('Error resuming:', e); }
-      };
-
-      // ----- Game flow -----
-      const handleStartGame = () => {
-        if (playlist.length === 0) return;
-        setStep(4);
-        setCurrentRound(1);
-        setTimeLeft(gameSettings.roundLength);
-        const firstTrack = playlist[0];
-        setCurrentTrack({ name: firstTrack.name, artist: firstTrack.artists[0].name, uri: firstTrack.uri });
-        setIsPlaying(true);
-        playTrack(firstTrack.uri);
-      };
-
-      useEffect(() => {
-        if (isPlaying && step === 4) {
-          timerRef.current = setInterval(() => {
-            setTimeLeft(prev => {
-              if (prev <= 1) {
-                if (currentRound < playlist.length) {
-                  const nextTrack = playlist[currentRound];
-                  setCurrentRound(currentRound + 1);
-                  setCurrentTrack({ name: nextTrack.name, artist: nextTrack.artists[0].name, uri: nextTrack.uri });
-                  playTrack(nextTrack.uri);
-                  return gameSettings.roundLength;
-                } else {
-                  setIsPlaying(false);
-                  pausePlayback();
-                  return 0;
-                }
-              }
-              return prev - 1;
-            });
-          }, 1000);
-        }
-        return () => { if (timerRef.current) clearInterval(timerRef.current); };
-      }, [isPlaying, step, currentRound, playlist, gameSettings]);
-
-      const togglePlayPause = async () => {
-        if (isPlaying) { await pausePlayback(); setIsPlaying(false); }
-        else { await resumePlayback(); setIsPlaying(true); }
-      };
-
-      // ----- Wheel UI (only once!) -----
-      const renderWheel = () => {
-        const percentage = (timeLeft / gameSettings.roundLength) * 100;
-        const dashArray = 2 * Math.PI * 220;
-        const dashOffset = dashArray - (dashArray * percentage) / 100;
-        const shouldBlur = timeLeft > 10;
-
-        return (
-          <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
-            <SpaceyBackground />
-            <div className="relative z-10 flex flex-col items-center justify-center">
-              <div className="relative w-[600px] h-[600px] animate-pulse">
-                <svg className="transform -rotate-90 w-[600px] h-[600px]">
-                  <circle cx="300" cy="300" r="220" stroke="rgba(255,255,255,0.1)" strokeWidth="35" fill="none" />
-                  <circle cx="300" cy="300" r="220" stroke="url(#gradient)" strokeWidth="35" fill="none"
-                          strokeDasharray={dashArray} strokeDashoffset={dashOffset}
-                          className="transition-all duration-1000" strokeLinecap="round"
-                          style={{ filter: 'drop-shadow(0 0 30px rgba(59,130,246,0.9))' }}/>
-                  <defs>
-                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" style={{stopColor: '#3b82f6', stopOpacity: 1}} />
-                      <stop offset="50%" style={{stopColor: '#06b6d4', stopOpacity: 1}} />
-                      <stop offset="100%" style={{stopColor: '#10b981', stopOpacity: 1}} />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center px-20">
-                  <div className={`text-center transition-all duration-500 ${shouldBlur ? 'blur-lg' : ''}`}>
-                    <div className="text-5xl font-bold text-white mb-6 drop-shadow-2xl leading-tight">{currentTrack?.name}</div>
-                    <div className="text-3xl text-gray-200 drop-shadow-xl">{currentTrack?.artist}</div>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-16">
-                <button onClick={togglePlayPause}
-                        className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white p-6 rounded-full transition-all shadow-2xl hover:scale-110"
-                        style={{ boxShadow: '0 0 50px rgba(6, 182, 212, 0.7)' }}>
-                  {isPlaying ? <PauseIcon /> : <PlayIcon />}
-                </button>
-              </div>
-            </div>
-            <div className="absolute bottom-10 right-10 text-right z-20">
-              <div className="text-white text-2xl font-bold mb-2 drop-shadow-lg">Round {currentRound}/{playlist.length}</div>
-              <div className="text-cyan-300 text-xl drop-shadow-lg">{timeLeft}s left</div>
-            </div>
-            {currentRound >= playlist.length && timeLeft === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center z-30 bg-black bg-opacity-70">
-                <div className="text-center">
-                  <div className="text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-4 animate-pulse">
-                    Game Complete! 🎉
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+        const PlayIcon = () => (
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
         );
-      };
 
-      return (
-        <div className="min-h-screen">
-          {step === 1 && (
-            <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
-              <SpaceyBackground />
-              <div className="relative z-10 max-w-xl w-full mx-auto px-8">
-                <div className="text-center space-y-8">
-                  <div className="flex items-center justify-center mb-8">
-                    <div className="text-cyan-400 mr-3"><MusicIcon /></div>
-                    <h1 className="text-6xl font-bold text-white drop-shadow-2xl">Power Hour</h1>
-                  </div>
-                  <h2 className="text-3xl font-semibold text-white mb-4">Step 1: Connect to Spotify</h2>
-                  <p className="text-gray-300 text-lg mb-8">Connect your Spotify account to create your custom Power Hour playlist</p>
-                  <button onClick={handleSpotifyLogin}
-                          className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-12 py-5 rounded-full text-xl font-semibold transition-all shadow-2xl hover:scale-105"
-                          style={{ boxShadow: '0 0 40px rgba(34, 197, 94, 0.6)' }}>
-                    Login with Spotify
-                  </button>
-                  <div className="mt-8 p-6 bg-black bg-opacity-40 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-2xl">
-                    <p className="text-sm text-gray-300">You'll be redirected to Spotify to log in. Spotify Premium is required for playback.</p>
-                  </div>
-                </div>
-              </div>
+        const PauseIcon = () => (
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="6" y="4" width="4" height="16"></rect>
+                <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+        );
+
+        const MusicIcon = () => (
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18V5l12-2v13"></path>
+                <circle cx="6" cy="18" r="3"></circle>
+                <circle cx="18" cy="16" r="3"></circle>
+            </svg>
+        );
+
+        // Spacey background component
+        const SpaceyBackground = () => (
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-blue-900 to-black overflow-hidden">
+                <div className="absolute top-20 left-20 w-96 h-96 bg-purple-500 rounded-full blur-3xl opacity-30 animate-pulse"></div>
+                <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-500 rounded-full blur-3xl opacity-30 animate-pulse" style={{animationDelay: '1s'}}></div>
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-pink-500 rounded-full blur-3xl opacity-20 animate-pulse" style={{animationDelay: '2s'}}></div>
+                <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-indigo-500 rounded-full blur-3xl opacity-25 animate-pulse" style={{animationDelay: '0.5s'}}></div>
             </div>
-          )}
+        );
 
-          {step === 2 && (
-            <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
-              <SpaceyBackground />
-              <div className="relative z-10 max-w-xl w-full mx-auto px-8">
-                <div className="space-y-8">
-                  <div className="text-center mb-8">
-                    <h2 className="text-4xl font-bold text-white mb-4">Step 2: Create Your Playlist</h2>
-                  </div>
-                  <div className="space-y-6">
-                    <div>
-                      <label className="block text-lg font-medium text-cyan-300 mb-3">Genre *</label>
-                      <input type="text" value={playlistCriteria.genre}
-                             onChange={(e) => setPlaylistCriteria({...playlistCriteria, genre: e.target.value})}
-                             placeholder="e.g., emo, rock, hip hop, indie"
-                             className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg" />
+        function PowerHourGame() {
+            const [step, setStep] = useState(1);
+            const [spotifyToken, setSpotifyToken] = useState(null);
+            const [deviceId, setDeviceId] = useState(null);
+            const [player, setPlayer] = useState(null);
+            const [playlistCriteria, setPlaylistCriteria] = useState({
+                genre: '',
+                timePeriod: '',
+                difficulty: 1
+            });
+            const [playlist, setPlaylist] = useState([]);
+            const [gameSettings, setGameSettings] = useState({
+                rounds: 60,
+                roundLength: 60
+            });
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [currentRound, setCurrentRound] = useState(0);
+            const [timeLeft, setTimeLeft] = useState(0);
+            const [currentTrack, setCurrentTrack] = useState(null);
+            const timerRef = useRef(null);
+
+            const CLIENT_ID = '8fc1832fa4174a4f91be79ec44113742';
+            const REDIRECT_URI = 'https://aatopini.github.io/power-hour-app/';
+            const SCOPES = 'streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state playlist-read-private';
+
+            const handleSpotifyLogin = async () => {
+                const codeVerifier = generateRandomString(64);
+                const hashed = await sha256(codeVerifier);
+                const codeChallenge = base64encode(hashed);
+
+                window.localStorage.setItem('code_verifier', codeVerifier);
+
+                const authUrl = new URL("https://accounts.spotify.com/authorize");
+                const params = {
+                    response_type: 'code',
+                    client_id: CLIENT_ID,
+                    scope: SCOPES,
+                    code_challenge_method: 'S256',
+                    code_challenge: codeChallenge,
+                    redirect_uri: REDIRECT_URI,
+                };
+
+                authUrl.search = new URLSearchParams(params).toString();
+                window.location.href = authUrl.toString();
+            };
+
+            const getAccessToken = async (code) => {
+                const codeVerifier = window.localStorage.getItem('code_verifier');
+
+                const response = await fetch('https://accounts.spotify.com/api/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        client_id: CLIENT_ID,
+                        grant_type: 'authorization_code',
+                        code: code,
+                        redirect_uri: REDIRECT_URI,
+                        code_verifier: codeVerifier,
+                    }),
+                });
+
+                const data = await response.json();
+                return data.access_token;
+            };
+
+            useEffect(() => {
+                const args = new URLSearchParams(window.location.search);
+                const code = args.get('code');
+
+                if (code) {
+                    getAccessToken(code).then(token => {
+                        setSpotifyToken(token);
+                        window.localStorage.removeItem('code_verifier');
+                        window.history.replaceState({}, document.title, REDIRECT_URI);
+                    }).catch(error => {
+                        console.error('Error getting access token:', error);
+                    });
+                }
+            }, []);
+
+            useEffect(() => {
+                if (spotifyToken && !player) {
+                    const script = document.createElement('script');
+                    script.src = 'https://sdk.scdn.co/spotify-player.js';
+                    script.async = true;
+                    
+                    window.onSpotifyWebPlaybackSDKReady = () => {
+                        const spotifyPlayer = new window.Spotify.Player({
+                            name: 'Power Hour Player',
+                            getOAuthToken: cb => { cb(spotifyToken); },
+                            volume: 0.8
+                        });
+
+                        spotifyPlayer.addListener('ready', ({ device_id }) => {
+                            console.log('Ready with Device ID', device_id);
+                            setDeviceId(device_id);
+                            setStep(2);
+                        });
+
+                        spotifyPlayer.addListener('not_ready', ({ device_id }) => {
+                            console.log('Device ID has gone offline', device_id);
+                        });
+
+                        spotifyPlayer.connect();
+                        setPlayer(spotifyPlayer);
+                    };
+                    
+                    document.body.appendChild(script);
+                }
+            }, [spotifyToken, player]);
+
+            const searchTracks = async () => {
+                if (!spotifyToken) return;
+
+                try {
+                    let query = playlistCriteria.genre;
+                    
+                    if (playlistCriteria.timePeriod) {
+                        const yearMatch = playlistCriteria.timePeriod.match(/(\d{4})/);
+                        if (yearMatch) {
+                            query += ` year:${yearMatch[1]}`;
+                        }
+                    }
+
+                    const response = await fetch(
+                        `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=50`,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${spotifyToken}`
+                            }
+                        }
+                    );
+
+                    const data = await response.json();
+                    
+                    if (data.tracks && data.tracks.items) {
+                        const shuffled = data.tracks.items
+                            .sort(() => 0.5 - Math.random())
+                            .slice(0, gameSettings.rounds);
+                        
+                        setPlaylist(shuffled);
+                        return shuffled;
+                    }
+                } catch (error) {
+                    console.error('Error searching tracks:', error);
+                    alert('Error searching for tracks. Please try again.');
+                }
+                return [];
+            };
+
+            const handleCreatePlaylist = async () => {
+                const tracks = await searchTracks();
+                if (tracks && tracks.length > 0) {
+                    setStep(3);
+                } else {
+                    alert('No tracks found. Please try different criteria.');
+                }
+            };
+
+            const playTrack = async (trackUri) => {
+                if (!deviceId || !spotifyToken) return;
+
+                try {
+                    await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                            uris: [trackUri]
+                        }),
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${spotifyToken}`
+                        }
+                    });
+                } catch (error) {
+                    console.error('Error playing track:', error);
+                }
+            };
+
+            const pausePlayback = async () => {
+                if (!deviceId || !spotifyToken) return;
+
+                try {
+                    await fetch(`https://api.spotify.com/v1/me/player/pause?device_id=${deviceId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${spotifyToken}`
+                        }
+                    });
+                } catch (error) {
+                    console.error('Error pausing:', error);
+                }
+            };
+
+            const resumePlayback = async () => {
+                if (!deviceId || !spotifyToken) return;
+
+                try {
+                    await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${spotifyToken}`
+                        }
+                    });
+                } catch (error) {
+                    console.error('Error resuming:', error);
+                }
+            };
+
+            const handleStartGame = () => {
+                if (playlist.length === 0) return;
+                
+                setStep(4);
+                setCurrentRound(1);
+                setTimeLeft(gameSettings.roundLength);
+                const firstTrack = playlist[0];
+                setCurrentTrack({
+                    name: firstTrack.name,
+                    artist: firstTrack.artists[0].name,
+                    uri: firstTrack.uri
+                });
+                setIsPlaying(true);
+                playTrack(firstTrack.uri);
+            };
+
+            useEffect(() => {
+                if (isPlaying && step === 4) {
+                    timerRef.current = setInterval(() => {
+                        setTimeLeft(prev => {
+                            if (prev <= 1) {
+                                if (currentRound < playlist.length) {
+                                    const nextTrack = playlist[currentRound];
+                                    setCurrentRound(currentRound + 1);
+                                    setCurrentTrack({
+                                        name: nextTrack.name,
+                                        artist: nextTrack.artists[0].name,
+                                        uri: nextTrack.uri
+                                    });
+                                    playTrack(nextTrack.uri);
+                                    return gameSettings.roundLength;
+                                } else {
+                                    setIsPlaying(false);
+                                    pausePlayback();
+                                    return 0;
+                                }
+                            }
+                            return prev - 1;
+                        });
+                    }, 1000);
+                }
+
+                return () => {
+                    if (timerRef.current) {
+                        clearInterval(timerRef.current);
+                    }
+                };
+            }, [isPlaying, step, currentRound, playlist, gameSettings]);
+
+            const togglePlayPause = async () => {
+                if (isPlaying) {
+                    await pausePlayback();
+                    setIsPlaying(false);
+                } else {
+                    await resumePlayback();
+                    setIsPlaying(true);
+                }
+            };
+
+            const renderWheel = () => {
+                const percentage = (timeLeft / gameSettings.roundLength) * 100;
+                const dashArray = 2 * Math.PI * 220;
+                const dashOffset = dashArray - (dashArray * percentage) / 100;
+                const shouldBlur = timeLeft > 10;
+
+                return (
+                    <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+                        <SpaceyBackground />
+
+                        {/* Main content */}
+                        <div className="relative z-10 flex flex-col items-center justify-center">
+                            {/* Large pulsating wheel */}
+                            <div className="relative w-[600px] h-[600px] animate-pulse">
+                                <svg className="transform -rotate-90 w-[600px] h-[600px]">
+                                    <circle
+                                        cx="300"
+                                        cy="300"
+                                        r="220"
+                                        stroke="rgba(255, 255, 255, 0.1)"
+                                        strokeWidth="35"
+                                        fill="none"
+                                    />
+                                    <circle
+                                        cx="300"
+                                        cy="300"
+                                        r="220"
+                                        stroke="url(#gradient)"
+                                        strokeWidth="35"
+                                        fill="none"
+                                        strokeDasharray={dashArray}
+                                        strokeDashoffset={dashOffset}
+                                        className="transition-all duration-1000"
+                                        strokeLinecap="round"
+                                        style={{
+                                            filter: 'drop-shadow(0 0 30px rgba(59, 130, 246, 0.9))'
+                                        }}
+                                    />
+                                    <defs>
+                                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" style={{stopColor: '#3b82f6', stopOpacity: 1}} />
+                                            <stop offset="50%" style={{stopColor: '#06b6d4', stopOpacity: 1}} />
+                                            <stop offset="100%" style={{stopColor: '#10b981', stopOpacity: 1}} />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                                
+                                {/* Song info in center of wheel */}
+                                <div className="absolute inset-0 flex flex-col items-center justify-center px-20">
+                                    <div className={`text-center transition-all duration-500 ${shouldBlur ? 'blur-lg' : ''}`}>
+                                        <div className="text-5xl font-bold text-white mb-6 drop-shadow-2xl leading-tight">{currentTrack?.name}</div>
+                                        <div className="text-3xl text-gray-200 drop-shadow-xl">{currentTrack?.artist}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Play/Pause button below wheel */}
+                            <div className="mt-16">
+                                <button
+                                    onClick={togglePlayPause}
+                                    className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white p-6 rounded-full transition-all shadow-2xl hover:scale-110"
+                                    style={{
+                                        boxShadow: '0 0 50px rgba(6, 182, 212, 0.7)'
+                                    }}
+                                >
+                                    {isPlaying ? <PauseIcon /> : <PlayIcon />}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Round and time info in bottom right */}
+                        <div className="absolute bottom-10 right-10 text-right z-20">
+                            <div className="text-white text-2xl font-bold mb-2 drop-shadow-lg">
+                                Round {currentRound}/{playlist.length}
+                            </div>
+                            <div className="text-cyan-300 text-xl drop-shadow-lg">
+                                {timeLeft}s left
+                            </div>
+                        </div>
+
+                        {currentRound >= playlist.length && timeLeft === 0 && (
+                            <div className="absolute inset-0 flex items-center justify-center z-30 bg-black bg-opacity-70">
+                                <div className="text-center">
+                                    <div className="text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-4 animate-pulse">
+                                        Game Complete! 🎉
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                    <div>
-                      <label className="block text-lg font-medium text-cyan-300 mb-3">Time Period (Optional)</label>
-                      <input type="text" value={playlistCriteria.timePeriod}
-                             onChange={(e) => setPlaylistCriteria({...playlistCriteria, timePeriod: e.target.value})}
-                             placeholder="e.g., 2000s, 1990, 2010-2020"
-                             className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg" />
-                    </div>
-                    <div>
-                      <label className="block text-lg font-medium text-cyan-300 mb-3">Difficulty Level</label>
-                      <select value={playlistCriteria.difficulty}
-                              onChange={(e) => setPlaylistCriteria({...playlistCriteria, difficulty: parseInt(e.target.value)})}
-                              className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg cursor-pointer">
-                        <option value="1">1. Mainstream - Well-known hits</option>
-                        <option value="2">2. Novice - Popular songs</option>
-                        <option value="3">3. Adept - Mix of popular and deep cuts</option>
-                        <option value="4">4. Expert - Lesser-known tracks</option>
-                        <option value="5">5. Pro - Obscure and niche</option>
-                      </select>
-                      <p className="text-sm text-gray-400 mt-2">Controls how well-known the songs are</p>
-                    </div>
-                    <button onClick={handleCreatePlaylist}
-                            disabled={!playlistCriteria.genre}
-                            className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:from-gray-600 disabled:to-gray-700 text-white px-8 py-5 rounded-xl text-xl font-semibold transition-all shadow-2xl hover:scale-105"
-                            style={{ boxShadow: playlistCriteria.genre ? '0 0 40px rgba(6, 182, 212, 0.6)' : 'none' }}>
-                      Create Playlist
-                    </button>
-                  </div>
+                );
+            };
+
+            return (
+                <div className="min-h-screen">
+                    {step === 1 && (
+                        <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+                            <SpaceyBackground />
+                            
+                            <div className="relative z-10 max-w-xl w-full mx-auto px-8">
+                                <div className="text-center space-y-8">
+                                    <div className="flex items-center justify-center mb-8">
+                                        <div className="text-cyan-400 mr-3">
+                                            <MusicIcon />
+                                        </div>
+                                        <h1 className="text-6xl font-bold text-white drop-shadow-2xl">Power Hour</h1>
+                                    </div>
+                                    
+                                    <h2 className="text-3xl font-semibold text-white mb-4">Step 1: Connect to Spotify</h2>
+                                    <p className="text-gray-300 text-lg mb-8">
+                                        Connect your Spotify account to create your custom Power Hour playlist
+                                    </p>
+                                    
+                                    <button
+                                        onClick={handleSpotifyLogin}
+                                        className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-12 py-5 rounded-full text-xl font-semibold transition-all shadow-2xl hover:scale-105"
+                                        style={{
+                                            boxShadow: '0 0 40px rgba(34, 197, 94, 0.6)'
+                                        }}
+                                    >
+                                        Login with Spotify
+                                    </button>
+                                    
+                                    <div className="mt-8 p-6 bg-black bg-opacity-40 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-2xl">
+                                        <p className="text-sm text-gray-300">
+                                            You'll be redirected to Spotify to log in with your username and password. 
+                                            Make sure you have Spotify Premium to use the playback features.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 2 && (
+                        <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+                            <SpaceyBackground />
+                            
+                            <div className="relative z-10 max-w-xl w-full mx-auto px-8">
+                                <div className="space-y-8">
+                                    <div className="text-center mb-8">
+                                        <h2 className="text-4xl font-bold text-white mb-4">Step 2: Create Your Playlist</h2>
+                                    </div>
+                                    
+                                    <div className="space-y-6">
+                                        <div>
+                                            <label className="block text-lg font-medium text-cyan-300 mb-3">
+                                                Genre *
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={playlistCriteria.genre}
+                                                onChange={(e) => setPlaylistCriteria({...playlistCriteria, genre: e.target.value})}
+                                                placeholder="e.g., Pop, Rock, Hip Hop"
+                                                className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-lg font-medium text-cyan-300 mb-3">
+                                                Time Period (Optional)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={playlistCriteria.timePeriod}
+                                                onChange={(e) => setPlaylistCriteria({...playlistCriteria, timePeriod: e.target.value})}
+                                                placeholder="e.g., 2000s, 1990, 2010-2020"
+                                                className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg"
+                                            />
+                                        </div>
+                                        <button
+                                            onClick={handleCreatePlaylist}
+                                            disabled={!playlistCriteria.genre}
+                                            className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:from-gray-600 disabled:to-gray-700 text-white px-8 py-5 rounded-xl text-xl font-semibold transition-all shadow-2xl hover:scale-105"
+                                            style={{
+                                                boxShadow: playlistCriteria.genre ? '0 0 40px rgba(6, 182, 212, 0.6)' : 'none'
+                                            }}
+                                        >
+                                            Create Playlist
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 3 && (
+                        <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+                            <SpaceyBackground />
+                            
+                            <div className="relative z-10 max-w-xl w-full mx-auto px-8">
+                                <div className="space-y-8">
+                                    <div className="text-center mb-8">
+                                        <h2 className="text-4xl font-bold text-white mb-4">Step 3: Game Settings</h2>
+                                    </div>
+                                    
+                                    <div className="p-6 bg-black bg-opacity-40 backdrop-blur-sm border border-green-500 border-opacity-30 rounded-2xl mb-6">
+                                        <p className="text-lg text-green-300">
+                                            ✓ Found {playlist.length} tracks matching your criteria!
+                                        </p>
+                                    </div>
+                                    
+                                    <div className="space-y-6">
+                                        <div>
+                                            <label className="block text-lg font-medium text-cyan-300 mb-3">
+                                                Number of Rounds
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={gameSettings.rounds}
+                                                onChange={(e) => setGameSettings({...gameSettings, rounds: Math.min(parseInt(e.target.value) || 1, playlist.length)})}
+                                                min="1"
+                                                max={playlist.length}
+                                                className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg"
+                                            />
+                                            <p className="text-sm text-gray-400 mt-2">Max: {playlist.length} tracks</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-lg font-medium text-cyan-300 mb-3">
+                                                Round Length (seconds)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={gameSettings.roundLength}
+                                                onChange={(e) => setGameSettings({...gameSettings, roundLength: parseInt(e.target.value) || 10})}
+                                                min="10"
+                                                max="300"
+                                                className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg"
+                                            />
+                                        </div>
+                                        <button
+                                            onClick={handleStartGame}
+                                            className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-8 py-5 rounded-xl text-xl font-semibold transition-all shadow-2xl hover:scale-105"
+                                            style={{
+                                                boxShadow: '0 0 40px rgba(34, 197, 94, 0.6)'
+                                            }}
+                                        >
+                                            Start Power Hour!
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 4 && renderWheel()}
                 </div>
-              </div>
-            </div>
-          )}
+            );
+        }
 
-          {step === 3 && (
-            <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
-              <SpaceyBackground />
-              <div className="relative z-10 max-w-xl w-full mx-auto px-8">
-                <div className="space-y-8">
-                  <div className="text-center mb-8">
-                    <h2 className="text-4xl font-bold text-white mb-4">Step 3: Game Settings</h2>
-                  </div>
-                  <div className="p-6 bg-black bg-opacity-40 backdrop-blur-sm border border-green-500 border-opacity-30 rounded-2xl mb-6">
-                    <p className="text-lg text-green-300">✓ Found {playlist.length} tracks matching your criteria!</p>
-                  </div>
-                  <div className="space-y-6">
-                    <div>
-                      <label className="block text-lg font-medium text-cyan-300 mb-3">Number of Rounds</label>
-                      <input type="number" value={gameSettings.rounds}
-                             onChange={(e) => setGameSettings({...gameSettings, rounds: Math.min(parseInt(e.target.value) || 1, playlist.length)})}
-                             min="1" max={playlist.length}
-                             className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg" />
-                      <p className="text-sm text-gray-400 mt-2">Max: {playlist.length} tracks</p>
-                    </div>
-                    <div>
-                      <label className="block text-lg font-medium text-cyan-300 mb-3">Round Length (seconds)</label>
-                      <input type="number" value={gameSettings.roundLength}
-                             onChange={(e) => setGameSettings({...gameSettings, roundLength: parseInt(e.target.value) || 10})}
-                             min="10" max="300"
-                             className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg" />
-                    </div>
-                    <button onClick={handleStartGame}
-                            className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-8 py-5 rounded-xl text-xl font-semibold transition-all shadow-2xl hover:scale-105"
-                            style={{ boxShadow: '0 0 40px rgba(34, 197, 94, 0.6)' }}>
-                      Start Power Hour!
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {step === 4 && renderWheel()}
-        </div>
-      );
-    }
-
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<PowerHourGame />);
-  </script>
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<PowerHourGame />);
+    </script>
 </body>
 </html>
