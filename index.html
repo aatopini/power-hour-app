@@ -56,6 +56,16 @@
             </svg>
         );
 
+        // Spacey background component
+        const SpaceyBackground = () => (
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-blue-900 to-black overflow-hidden">
+                <div className="absolute top-20 left-20 w-96 h-96 bg-purple-500 rounded-full blur-3xl opacity-30 animate-pulse"></div>
+                <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-500 rounded-full blur-3xl opacity-30 animate-pulse" style={{animationDelay: '1s'}}></div>
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-pink-500 rounded-full blur-3xl opacity-20 animate-pulse" style={{animationDelay: '2s'}}></div>
+                <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-indigo-500 rounded-full blur-3xl opacity-25 animate-pulse" style={{animationDelay: '0.5s'}}></div>
+            </div>
+        );
+
         function PowerHourGame() {
             const [step, setStep] = useState(1);
             const [spotifyToken, setSpotifyToken] = useState(null);
@@ -85,7 +95,6 @@
                 const hashed = await sha256(codeVerifier);
                 const codeChallenge = base64encode(hashed);
 
-                // Store the code verifier for later use
                 window.localStorage.setItem('code_verifier', codeVerifier);
 
                 const authUrl = new URL("https://accounts.spotify.com/authorize");
@@ -102,7 +111,6 @@
                 window.location.href = authUrl.toString();
             };
 
-            // Exchange authorization code for access token
             const getAccessToken = async (code) => {
                 const codeVerifier = window.localStorage.getItem('code_verifier');
 
@@ -124,7 +132,6 @@
                 return data.access_token;
             };
 
-            // Check for authorization code in URL on mount
             useEffect(() => {
                 const args = new URLSearchParams(window.location.search);
                 const code = args.get('code');
@@ -133,7 +140,6 @@
                     getAccessToken(code).then(token => {
                         setSpotifyToken(token);
                         window.localStorage.removeItem('code_verifier');
-                        // Clean up URL
                         window.history.replaceState({}, document.title, REDIRECT_URI);
                     }).catch(error => {
                         console.error('Error getting access token:', error);
@@ -143,12 +149,10 @@
 
             useEffect(() => {
                 if (spotifyToken && !player) {
-                    // Load Spotify SDK script
                     const script = document.createElement('script');
                     script.src = 'https://sdk.scdn.co/spotify-player.js';
                     script.async = true;
                     
-                    // Define the callback BEFORE loading the script
                     window.onSpotifyWebPlaybackSDKReady = () => {
                         const spotifyPlayer = new window.Spotify.Player({
                             name: 'Power Hour Player',
@@ -332,72 +336,67 @@
 
             const renderWheel = () => {
                 const percentage = (timeLeft / gameSettings.roundLength) * 100;
-                const dashArray = 2 * Math.PI * 180;
+                const dashArray = 2 * Math.PI * 220;
                 const dashOffset = dashArray - (dashArray * percentage) / 100;
                 const shouldBlur = timeLeft > 10;
 
                 return (
                     <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
-                        {/* Spacey blurry background */}
-                        <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-blue-900 to-black">
-                            <div className="absolute top-20 left-20 w-96 h-96 bg-purple-500 rounded-full blur-3xl opacity-30 animate-pulse"></div>
-                            <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-500 rounded-full blur-3xl opacity-30 animate-pulse" style={{animationDelay: '1s'}}></div>
-                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-pink-500 rounded-full blur-3xl opacity-20 animate-pulse" style={{animationDelay: '2s'}}></div>
-                        </div>
+                        <SpaceyBackground />
 
                         {/* Main content */}
                         <div className="relative z-10 flex flex-col items-center justify-center">
                             {/* Large pulsating wheel */}
-                            <div className="relative w-[500px] h-[500px] animate-pulse">
-                                <svg className="transform -rotate-90 w-[500px] h-[500px]">
+                            <div className="relative w-[600px] h-[600px] animate-pulse">
+                                <svg className="transform -rotate-90 w-[600px] h-[600px]">
                                     <circle
-                                        cx="250"
-                                        cy="250"
-                                        r="180"
+                                        cx="300"
+                                        cy="300"
+                                        r="220"
                                         stroke="rgba(255, 255, 255, 0.1)"
-                                        strokeWidth="30"
+                                        strokeWidth="35"
                                         fill="none"
                                     />
                                     <circle
-                                        cx="250"
-                                        cy="250"
-                                        r="180"
+                                        cx="300"
+                                        cy="300"
+                                        r="220"
                                         stroke="url(#gradient)"
-                                        strokeWidth="30"
+                                        strokeWidth="35"
                                         fill="none"
                                         strokeDasharray={dashArray}
                                         strokeDashoffset={dashOffset}
                                         className="transition-all duration-1000"
                                         strokeLinecap="round"
                                         style={{
-                                            filter: 'drop-shadow(0 0 20px rgba(147, 51, 234, 0.8))'
+                                            filter: 'drop-shadow(0 0 30px rgba(59, 130, 246, 0.9))'
                                         }}
                                     />
                                     <defs>
                                         <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                            <stop offset="0%" style={{stopColor: '#a855f7', stopOpacity: 1}} />
-                                            <stop offset="50%" style={{stopColor: '#ec4899', stopOpacity: 1}} />
-                                            <stop offset="100%" style={{stopColor: '#3b82f6', stopOpacity: 1}} />
+                                            <stop offset="0%" style={{stopColor: '#3b82f6', stopOpacity: 1}} />
+                                            <stop offset="50%" style={{stopColor: '#06b6d4', stopOpacity: 1}} />
+                                            <stop offset="100%" style={{stopColor: '#10b981', stopOpacity: 1}} />
                                         </linearGradient>
                                     </defs>
                                 </svg>
                                 
                                 {/* Song info in center of wheel */}
-                                <div className="absolute inset-0 flex flex-col items-center justify-center px-16">
-                                    <div className={`text-center transition-all duration-500 ${shouldBlur ? 'blur-md' : ''}`}>
-                                        <div className="text-4xl font-bold text-white mb-4 drop-shadow-lg">{currentTrack?.name}</div>
-                                        <div className="text-2xl text-gray-300 drop-shadow-lg">{currentTrack?.artist}</div>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center px-20">
+                                    <div className={`text-center transition-all duration-500 ${shouldBlur ? 'blur-lg' : ''}`}>
+                                        <div className="text-5xl font-bold text-white mb-6 drop-shadow-2xl leading-tight">{currentTrack?.name}</div>
+                                        <div className="text-3xl text-gray-200 drop-shadow-xl">{currentTrack?.artist}</div>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Play/Pause button below wheel */}
-                            <div className="mt-12">
+                            <div className="mt-16">
                                 <button
                                     onClick={togglePlayPause}
-                                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white p-6 rounded-full transition-all shadow-2xl hover:scale-110"
+                                    className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white p-6 rounded-full transition-all shadow-2xl hover:scale-110"
                                     style={{
-                                        boxShadow: '0 0 40px rgba(147, 51, 234, 0.6)'
+                                        boxShadow: '0 0 50px rgba(6, 182, 212, 0.7)'
                                     }}
                                 >
                                     {isPlaying ? <PauseIcon /> : <PlayIcon />}
@@ -406,19 +405,19 @@
                         </div>
 
                         {/* Round and time info in bottom right */}
-                        <div className="absolute bottom-8 right-8 text-right z-20">
-                            <div className="text-white text-xl font-semibold mb-2 drop-shadow-lg">
+                        <div className="absolute bottom-10 right-10 text-right z-20">
+                            <div className="text-white text-2xl font-bold mb-2 drop-shadow-lg">
                                 Round {currentRound}/{playlist.length}
                             </div>
-                            <div className="text-gray-300 text-lg drop-shadow-lg">
+                            <div className="text-cyan-300 text-xl drop-shadow-lg">
                                 {timeLeft}s left
                             </div>
                         </div>
 
                         {currentRound >= playlist.length && timeLeft === 0 && (
-                            <div className="absolute inset-0 flex items-center justify-center z-30 bg-black bg-opacity-50">
+                            <div className="absolute inset-0 flex items-center justify-center z-30 bg-black bg-opacity-70">
                                 <div className="text-center">
-                                    <div className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 mb-4">
+                                    <div className="text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-4 animate-pulse">
                                         Game Complete! 🎉
                                     </div>
                                 </div>
@@ -429,43 +428,59 @@
             };
 
             return (
-                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-8">
-                    <div className="max-w-4xl mx-auto">
-                        <div className="bg-white rounded-2xl shadow-xl p-8">
-                            <div className="flex items-center justify-center mb-8">
-                                <div className="text-blue-600 mr-3">
-                                    <MusicIcon />
-                                </div>
-                                <h1 className="text-4xl font-bold text-gray-800">Power Hour</h1>
-                            </div>
-
-                            {step === 1 && (
-                                <div className="text-center space-y-6">
-                                    <h2 className="text-2xl font-semibold mb-4">Step 1: Connect to Spotify</h2>
-                                    <p className="text-gray-600 mb-6">
+                <div className="min-h-screen">
+                    {step === 1 && (
+                        <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+                            <SpaceyBackground />
+                            
+                            <div className="relative z-10 max-w-xl w-full mx-auto px-8">
+                                <div className="text-center space-y-8">
+                                    <div className="flex items-center justify-center mb-8">
+                                        <div className="text-cyan-400 mr-3">
+                                            <MusicIcon />
+                                        </div>
+                                        <h1 className="text-6xl font-bold text-white drop-shadow-2xl">Power Hour</h1>
+                                    </div>
+                                    
+                                    <h2 className="text-3xl font-semibold text-white mb-4">Step 1: Connect to Spotify</h2>
+                                    <p className="text-gray-300 text-lg mb-8">
                                         Connect your Spotify account to create your custom Power Hour playlist
                                     </p>
+                                    
                                     <button
                                         onClick={handleSpotifyLogin}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-full text-lg font-semibold transition-colors shadow-lg"
+                                        className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-12 py-5 rounded-full text-xl font-semibold transition-all shadow-2xl hover:scale-105"
+                                        style={{
+                                            boxShadow: '0 0 40px rgba(34, 197, 94, 0.6)'
+                                        }}
                                     >
                                         Login with Spotify
                                     </button>
-                                    <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                        <p className="text-sm text-gray-700">
+                                    
+                                    <div className="mt-8 p-6 bg-black bg-opacity-40 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-2xl">
+                                        <p className="text-sm text-gray-300">
                                             You'll be redirected to Spotify to log in with your username and password. 
                                             Make sure you have Spotify Premium to use the playback features.
                                         </p>
                                     </div>
                                 </div>
-                            )}
+                            </div>
+                        </div>
+                    )}
 
-                            {step === 2 && (
-                                <div className="space-y-6">
-                                    <h2 className="text-2xl font-semibold mb-4">Step 2: Create Your Playlist</h2>
-                                    <div className="space-y-4">
+                    {step === 2 && (
+                        <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+                            <SpaceyBackground />
+                            
+                            <div className="relative z-10 max-w-xl w-full mx-auto px-8">
+                                <div className="space-y-8">
+                                    <div className="text-center mb-8">
+                                        <h2 className="text-4xl font-bold text-white mb-4">Step 2: Create Your Playlist</h2>
+                                    </div>
+                                    
+                                    <div className="space-y-6">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            <label className="block text-lg font-medium text-cyan-300 mb-3">
                                                 Genre *
                                             </label>
                                             <input
@@ -473,11 +488,11 @@
                                                 value={playlistCriteria.genre}
                                                 onChange={(e) => setPlaylistCriteria({...playlistCriteria, genre: e.target.value})}
                                                 placeholder="e.g., Pop, Rock, Hip Hop"
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            <label className="block text-lg font-medium text-cyan-300 mb-3">
                                                 Time Period (Optional)
                                             </label>
                                             <input
@@ -485,31 +500,44 @@
                                                 value={playlistCriteria.timePeriod}
                                                 onChange={(e) => setPlaylistCriteria({...playlistCriteria, timePeriod: e.target.value})}
                                                 placeholder="e.g., 2000s, 1990, 2010-2020"
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg"
                                             />
                                         </div>
                                         <button
                                             onClick={handleCreatePlaylist}
                                             disabled={!playlistCriteria.genre}
-                                            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                                            className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:from-gray-600 disabled:to-gray-700 text-white px-8 py-5 rounded-xl text-xl font-semibold transition-all shadow-2xl hover:scale-105"
+                                            style={{
+                                                boxShadow: playlistCriteria.genre ? '0 0 40px rgba(6, 182, 212, 0.6)' : 'none'
+                                            }}
                                         >
                                             Create Playlist
                                         </button>
                                     </div>
                                 </div>
-                            )}
+                            </div>
+                        </div>
+                    )}
 
-                            {step === 3 && (
-                                <div className="space-y-6">
-                                    <h2 className="text-2xl font-semibold mb-4">Step 3: Game Settings</h2>
-                                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg mb-4">
-                                        <p className="text-sm text-green-800">
+                    {step === 3 && (
+                        <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+                            <SpaceyBackground />
+                            
+                            <div className="relative z-10 max-w-xl w-full mx-auto px-8">
+                                <div className="space-y-8">
+                                    <div className="text-center mb-8">
+                                        <h2 className="text-4xl font-bold text-white mb-4">Step 3: Game Settings</h2>
+                                    </div>
+                                    
+                                    <div className="p-6 bg-black bg-opacity-40 backdrop-blur-sm border border-green-500 border-opacity-30 rounded-2xl mb-6">
+                                        <p className="text-lg text-green-300">
                                             ✓ Found {playlist.length} tracks matching your criteria!
                                         </p>
                                     </div>
-                                    <div className="space-y-4">
+                                    
+                                    <div className="space-y-6">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            <label className="block text-lg font-medium text-cyan-300 mb-3">
                                                 Number of Rounds
                                             </label>
                                             <input
@@ -518,12 +546,12 @@
                                                 onChange={(e) => setGameSettings({...gameSettings, rounds: Math.min(parseInt(e.target.value) || 1, playlist.length)})}
                                                 min="1"
                                                 max={playlist.length}
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg"
                                             />
-                                            <p className="text-xs text-gray-500 mt-1">Max: {playlist.length} tracks</p>
+                                            <p className="text-sm text-gray-400 mt-2">Max: {playlist.length} tracks</p>
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            <label className="block text-lg font-medium text-cyan-300 mb-3">
                                                 Round Length (seconds)
                                             </label>
                                             <input
@@ -532,22 +560,25 @@
                                                 onChange={(e) => setGameSettings({...gameSettings, roundLength: parseInt(e.target.value) || 10})}
                                                 min="10"
                                                 max="300"
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg"
                                             />
                                         </div>
                                         <button
                                             onClick={handleStartGame}
-                                            className="w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold text-lg transition-colors shadow-lg"
+                                            className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-8 py-5 rounded-xl text-xl font-semibold transition-all shadow-2xl hover:scale-105"
+                                            style={{
+                                                boxShadow: '0 0 40px rgba(34, 197, 94, 0.6)'
+                                            }}
                                         >
                                             Start Power Hour!
                                         </button>
                                     </div>
                                 </div>
-                            )}
-
-                            {step === 4 && renderWheel()}
+                            </div>
                         </div>
-                    </div>
+                    )}
+
+                    {step === 4 && renderWheel()}
                 </div>
             );
         }
