@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Power Hour - Spotify Game</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -153,7 +153,7 @@
                     const script = document.createElement('script');
                     script.src = 'https://sdk.scdn.co/spotify-player.js';
                     script.async = true;
-                    
+
                     window.onSpotifyWebPlaybackSDKReady = () => {
                         const spotifyPlayer = new window.Spotify.Player({
                             name: 'Power Hour Player',
@@ -161,9 +161,22 @@
                             volume: 0.8
                         });
 
-                        spotifyPlayer.addListener('ready', ({ device_id }) => {
+                        spotifyPlayer.addListener('ready', async ({ device_id }) => {
                             console.log('Ready with Device ID', device_id);
                             setDeviceId(device_id);
+                            // Make this web player the active device
+                            try {
+                                await fetch('https://api.spotify.com/v1/me/player', {
+                                    method: 'PUT',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${spotifyToken}`
+                                    },
+                                    body: JSON.stringify({ device_ids: [device_id], play: false })
+                                });
+                            } catch (e) {
+                                console.warn('Transfer playback failed (may be fine):', e);
+                            }
                             setStep(2);
                         });
 
@@ -174,24 +187,24 @@
                         spotifyPlayer.connect();
                         setPlayer(spotifyPlayer);
                     };
-                    
+
                     document.body.appendChild(script);
                 }
             }, [spotifyToken, player]);
 
-            // Get seed artists for a genre
+            // Get seed artists for a genre (fallback path)
             const getSeedArtists = async (genre) => {
                 try {
                     const response = await fetch(
-                        `https://api.spotify.com/v1/search?q=genre:${encodeURIComponent(genre)}&type=artist&limit=5`,
-                        {
-                            headers: {
-                                'Authorization': `Bearer ${spotifyToken}`
-                            }
-                        }
+                        `https://api.spotify.com/v1/search?q=${encodeURIComponent('genre:"' + genre + '"')}&type=artist&limit=5`,
+                        { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
                     );
                     const data = await response.json();
-                    return data.artists.items.slice(0, 3).map(artist => artist.id);
+                    if (!response.ok) {
+                        console.error('Artist search error:', data);
+                        return [];
+                    }
+                    return (data.artists?.items || []).slice(0, 3).map(a => a.id);
                 } catch (error) {
                     console.error('Error getting seed artists:', error);
                     return [];
@@ -199,73 +212,91 @@
             };
 
             const searchTracks = async () => {
-                if (!spotifyToken) return;
+                if (!spotifyToken) return [];
 
                 try {
-                    // Get seed artists based on genre
-                    const seedArtists = await getSeedArtists(playlistCriteria.genre);
-                    
-                    if (seedArtists.length === 0) {
-                        alert('Could not find artists for this genre. Try a different genre name.');
+                    const typedGenre = (playlistCriteria.genre || "").trim().toLowerCase();
+                    const useSeedGenre = /^[a-z0-9\- ]+$/i.test(typedGenre) && typedGenre.length > 0;
+
+                    // Popularity buckets (slightly widened)
+                    const difficultyMap = {
+                        1: { min: 65, max: 100 }, // Mainstream
+                        2: { min: 45, max: 90 },  // Novice
+                        3: { min: 25, max: 80 },  // Adept
+                        4: { min: 10, max: 60 },  // Expert
+                        5: { min: 0,  max: 40 }   // Pro
+                    };
+                    const popularity = difficultyMap[playlistCriteria.difficulty];
+
+                    let seedArtists = [];
+                    if (!useSeedGenre) {
+                        seedArtists = await getSeedArtists(typedGenre);
+                        if (seedArtists.length === 0) {
+                            alert('Could not find artists for this genre. Try a different genre name.');
+                            return [];
+                        }
+                    }
+
+                    const params = new URLSearchParams({
+                        limit: "100",
+                        market: "from_token",
+                        min_popularity: String(popularity.min),
+                        max_popularity: String(popularity.max)
+                    });
+
+                    if (useSeedGenre) {
+                        // Convert spaces to hyphens (Spotify seed_genres format)
+                        params.set("seed_genres", typedGenre.replace(/\s+/g, "-"));
+                    } else {
+                        params.set("seed_artists", seedArtists.slice(0, 3).join(","));
+                    }
+
+                    const response = await fetch(
+                        `https://api.spotify.com/v1/recommendations?${params.toString()}`,
+                        { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+                    );
+                    const data = await response.json();
+                    if (!response.ok) {
+                        console.error('Recommendations error:', data);
+                        alert(data?.error?.message || 'Error searching for tracks.');
                         return [];
                     }
 
-                    // Map difficulty to popularity ranges
-                    const difficultyMap = {
-                        1: { min: 70, max: 100 },  // Mainstream - very popular
-                        2: { min: 50, max: 80 },   // Novice - popular
-                        3: { min: 30, max: 60 },   // Adept - moderate
-                        4: { min: 15, max: 40 },   // Expert - less known
-                        5: { min: 0, max: 25 }     // Pro - obscure/niche
-                    };
+                    let tracks = data.tracks || [];
 
-                    const popularity = difficultyMap[playlistCriteria.difficulty];
-
-                    // Build recommendations query
-                    let params = {
-                        seed_artists: seedArtists.join(','),
-                        limit: 50,
-                        min_popularity: popularity.min,
-                        max_popularity: popularity.max
-                    };
-
-                    // Add year filter if time period specified
+                    // Client-side year filtering (support 2000s, 2000-2009, or 2005)
                     if (playlistCriteria.timePeriod) {
-                        const yearMatch = playlistCriteria.timePeriod.match(/(\d{4})/);
-                        if (yearMatch) {
-                            const year = parseInt(yearMatch[1]);
-                            params.target_year = year;
-                        }
+                        const mRange  = playlistCriteria.timePeriod.match(/(\d{4})\s*-\s*(\d{4})/);
+                        const mDecade = playlistCriteria.timePeriod.match(/(\d{4})s/);
+                        const mYear   = playlistCriteria.timePeriod.match(/^(\d{4})$/);
+
+                        let yMin = 0, yMax = 9999;
+                        if (mRange)      { yMin = +mRange[1];  yMax = +mRange[2]; }
+                        else if (mDecade){ yMin = +mDecade[1]; yMax = yMin + 9; }
+                        else if (mYear)  { yMin = +mYear[1];   yMax = +mYear[1]; }
+
+                        tracks = tracks.filter(t => {
+                            const y = parseInt((t?.album?.release_date || '0000').slice(0,4), 10);
+                            return !isNaN(y) && y >= yMin && y <= yMax;
+                        });
                     }
 
-                    const queryString = new URLSearchParams(params).toString();
-                    const response = await fetch(
-                        `https://api.spotify.com/v1/recommendations?${queryString}`,
-                        {
-                            headers: {
-                                'Authorization': `Bearer ${spotifyToken}`
-                            }
-                        }
-                    );
-
-                    const data = await response.json();
-                    
-                    if (data.tracks && data.tracks.length > 0) {
-                        const shuffled = data.tracks
-                            .sort(() => 0.5 - Math.random())
-                            .slice(0, Math.min(gameSettings.rounds, data.tracks.length));
-                        
-                        setPlaylist(shuffled);
-                        return shuffled;
-                    } else {
+                    if (tracks.length === 0) {
                         alert('No tracks found. Try adjusting your criteria.');
                         return [];
                     }
+
+                    const shuffled = tracks
+                        .sort(() => Math.random() - 0.5)
+                        .slice(0, Math.min(gameSettings.rounds, tracks.length));
+
+                    setPlaylist(shuffled);
+                    return shuffled;
                 } catch (error) {
                     console.error('Error searching tracks:', error);
                     alert('Error searching for tracks. Please try again.');
+                    return [];
                 }
-                return [];
             };
 
             const handleCreatePlaylist = async () => {
@@ -281,16 +312,18 @@
                 if (!deviceId || !spotifyToken) return;
 
                 try {
-                    await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+                    const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
                         method: 'PUT',
-                        body: JSON.stringify({
-                            uris: [trackUri]
-                        }),
+                        body: JSON.stringify({ uris: [trackUri] }),
                         headers: {
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${spotifyToken}`
                         }
                     });
+                    if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        console.error('Play error:', data);
+                    }
                 } catch (error) {
                     console.error('Error playing track:', error);
                 }
@@ -302,9 +335,7 @@
                 try {
                     await fetch(`https://api.spotify.com/v1/me/player/pause?device_id=${deviceId}`, {
                         method: 'PUT',
-                        headers: {
-                            'Authorization': `Bearer ${spotifyToken}`
-                        }
+                        headers: { 'Authorization': `Bearer ${spotifyToken}` }
                     });
                 } catch (error) {
                     console.error('Error pausing:', error);
@@ -317,9 +348,7 @@
                 try {
                     await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
                         method: 'PUT',
-                        headers: {
-                            'Authorization': `Bearer ${spotifyToken}`
-                        }
+                        headers: { 'Authorization': `Bearer ${spotifyToken}` }
                     });
                 } catch (error) {
                     console.error('Error resuming:', error);
@@ -328,7 +357,7 @@
 
             const handleStartGame = () => {
                 if (playlist.length === 0) return;
-                
+
                 setStep(4);
                 setCurrentRound(1);
                 setTimeLeft(gameSettings.roundLength);
@@ -369,9 +398,7 @@
                 }
 
                 return () => {
-                    if (timerRef.current) {
-                        clearInterval(timerRef.current);
-                    }
+                    if (timerRef.current) clearInterval(timerRef.current);
                 };
             }, [isPlaying, step, currentRound, playlist, gameSettings]);
 
@@ -419,9 +446,7 @@
                                         strokeDashoffset={dashOffset}
                                         className="transition-all duration-1000"
                                         strokeLinecap="round"
-                                        style={{
-                                            filter: 'drop-shadow(0 0 30px rgba(59, 130, 246, 0.9))'
-                                        }}
+                                        style={{ filter: 'drop-shadow(0 0 30px rgba(59, 130, 246, 0.9))' }}
                                     />
                                     <defs>
                                         <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -431,7 +456,7 @@
                                         </linearGradient>
                                     </defs>
                                 </svg>
-                                
+
                                 {/* Song info in center of wheel */}
                                 <div className="absolute inset-0 flex flex-col items-center justify-center px-20">
                                     <div className={`text-center transition-all duration-500 ${shouldBlur ? 'blur-lg' : ''}`}>
@@ -446,9 +471,7 @@
                                 <button
                                     onClick={togglePlayPause}
                                     className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white p-6 rounded-full transition-all shadow-2xl hover:scale-110"
-                                    style={{
-                                        boxShadow: '0 0 50px rgba(6, 182, 212, 0.7)'
-                                    }}
+                                    style={{ boxShadow: '0 0 50px rgba(6, 182, 212, 0.7)' }}
                                 >
                                     {isPlaying ? <PauseIcon /> : <PlayIcon />}
                                 </button>
@@ -483,7 +506,7 @@
                     {step === 1 && (
                         <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
                             <SpaceyBackground />
-                            
+
                             <div className="relative z-10 max-w-xl w-full mx-auto px-8">
                                 <div className="text-center space-y-8">
                                     <div className="flex items-center justify-center mb-8">
@@ -492,25 +515,23 @@
                                         </div>
                                         <h1 className="text-6xl font-bold text-white drop-shadow-2xl">Power Hour</h1>
                                     </div>
-                                    
+
                                     <h2 className="text-3xl font-semibold text-white mb-4">Step 1: Connect to Spotify</h2>
                                     <p className="text-gray-300 text-lg mb-8">
                                         Connect your Spotify account to create your custom Power Hour playlist
                                     </p>
-                                    
+
                                     <button
                                         onClick={handleSpotifyLogin}
                                         className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-12 py-5 rounded-full text-xl font-semibold transition-all shadow-2xl hover:scale-105"
-                                        style={{
-                                            boxShadow: '0 0 40px rgba(34, 197, 94, 0.6)'
-                                        }}
+                                        style={{ boxShadow: '0 0 40px rgba(34, 197, 94, 0.6)' }}
                                     >
                                         Login with Spotify
                                     </button>
-                                    
+
                                     <div className="mt-8 p-6 bg-black bg-opacity-40 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-2xl">
                                         <p className="text-sm text-gray-300">
-                                            You'll be redirected to Spotify to log in with your username and password. 
+                                            You'll be redirected to Spotify to log in with your username and password.
                                             Make sure you have Spotify Premium to use the playback features.
                                         </p>
                                     </div>
@@ -522,13 +543,13 @@
                     {step === 2 && (
                         <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
                             <SpaceyBackground />
-                            
+
                             <div className="relative z-10 max-w-xl w-full mx-auto px-8">
                                 <div className="space-y-8">
                                     <div className="text-center mb-8">
                                         <h2 className="text-4xl font-bold text-white mb-4">Step 2: Create Your Playlist</h2>
                                     </div>
-                                    
+
                                     <div className="space-y-6">
                                         <div>
                                             <label className="block text-lg font-medium text-cyan-300 mb-3">
@@ -575,9 +596,7 @@
                                             onClick={handleCreatePlaylist}
                                             disabled={!playlistCriteria.genre}
                                             className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:from-gray-600 disabled:to-gray-700 text-white px-8 py-5 rounded-xl text-xl font-semibold transition-all shadow-2xl hover:scale-105"
-                                            style={{
-                                                boxShadow: playlistCriteria.genre ? '0 0 40px rgba(6, 182, 212, 0.6)' : 'none'
-                                            }}
+                                            style={{ boxShadow: playlistCriteria.genre ? '0 0 40px rgba(6, 182, 212, 0.6)' : 'none' }}
                                         >
                                             Create Playlist
                                         </button>
@@ -590,19 +609,19 @@
                     {step === 3 && (
                         <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
                             <SpaceyBackground />
-                            
+
                             <div className="relative z-10 max-w-xl w-full mx-auto px-8">
                                 <div className="space-y-8">
                                     <div className="text-center mb-8">
                                         <h2 className="text-4xl font-bold text-white mb-4">Step 3: Game Settings</h2>
                                     </div>
-                                    
+
                                     <div className="p-6 bg-black bg-opacity-40 backdrop-blur-sm border border-green-500 border-opacity-30 rounded-2xl mb-6">
                                         <p className="text-lg text-green-300">
                                             ✓ Found {playlist.length} tracks matching your criteria!
                                         </p>
                                     </div>
-                                    
+
                                     <div className="space-y-6">
                                         <div>
                                             <label className="block text-lg font-medium text-cyan-300 mb-3">
@@ -634,9 +653,7 @@
                                         <button
                                             onClick={handleStartGame}
                                             className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-8 py-5 rounded-xl text-xl font-semibold transition-all shadow-2xl hover:scale-105"
-                                            style={{
-                                                boxShadow: '0 0 40px rgba(34, 197, 94, 0.6)'
-                                            }}
+                                            style={{ boxShadow: '0 0 40px rgba(34, 197, 94, 0.6)' }}
                                         >
                                             Start Power Hour!
                                         </button>
