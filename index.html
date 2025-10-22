@@ -15,7 +15,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    // ============== PKCE helpers ==============
+    // ---------- PKCE helpers ----------
     function generateRandomString(length) {
       const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
       const values = crypto.getRandomValues(new Uint8Array(length));
@@ -31,7 +31,7 @@
         .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
     }
 
-    // ============== Icons & BG ==============
+    // ---------- Icons ----------
     const PlayIcon = () => (
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -50,6 +50,8 @@
         <circle cx="18" cy="16" r="3"></circle>
       </svg>
     );
+
+    // ---------- Background ----------
     const SpaceyBackground = () => (
       <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-blue-900 to-black overflow-hidden">
         <div className="absolute top-20 left-20 w-96 h-96 bg-purple-500 rounded-full blur-3xl opacity-30 animate-pulse"></div>
@@ -59,7 +61,7 @@
       </div>
     );
 
-    // ============== Safe JSON parsing & diagnostics ==============
+    // ---------- Safe JSON parsing & diagnostics ----------
     async function readJsonSafe(res) {
       const url = res.url || '';
       const status = `${res.status} ${res.statusText}`;
@@ -81,7 +83,7 @@
       console.error(`${what} error`, { res, data });
     }
 
-    // ============== Built-in fallback for genre seeds ==============
+    // ---------- Built-in fallback for genre seeds ----------
     const FALLBACK_SEEDS = [
       'acoustic','afrobeat','alt-rock','alternative','ambient','bluegrass','blues','brazil','breakbeat','british',
       'chill','classical','club','comedy','country','dance','dancehall','death-metal','deep-house','detroit-techno',
@@ -95,7 +97,6 @@
       'turkish','work-out','world-music'
     ];
 
-    // ============== App ==============
     function PowerHourGame() {
       const [step, setStep] = useState(1);
       const [spotifyToken, setSpotifyToken] = useState(null);
@@ -183,12 +184,11 @@
             spotifyPlayer.addListener('ready', async ({ device_id }) => {
               setDeviceId(device_id);
               try {
-                // make this player active (204 No Content)
                 await fetch('https://api.spotify.com/v1/me/player', {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${spotifyToken}` },
                   body: JSON.stringify({ device_ids: [device_id], play: false })
-                });
+                }); // 204 expected
               } catch (e) { console.warn('Transfer playback failed (may be fine):', e); }
               setStep(2);
             });
@@ -215,7 +215,7 @@
           });
           const data = await readJsonSafe(res);
           if (!res.ok || !Array.isArray(data.genres)) {
-            console.warn('available-genre-seeds not available, using fallback list.', { status: res.status, data });
+            console.warn('available-genre-seeds not available, using fallback', { status: res.status, data });
             return FALLBACK_SEEDS;
           }
           return (data.genres || []).map(g => g.toLowerCase());
@@ -323,7 +323,7 @@
             filtered = applyYear(tracks);
           }
 
-          // Retry: drop year filter if it was set
+          // Retry: drop year filter if set
           if (!filtered.length && playlistCriteria.timePeriod) filtered = tracks;
 
           // Retry: swap seed strategy
@@ -364,7 +364,7 @@
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${spotifyToken}` },
             body: JSON.stringify({ uris: [trackUri] })
-          }); // 204 No Content expected
+          }); // 204 expected
           if (!res.ok) {
             const data = await readJsonSafe(res);
             alertApiError('Play track', res, data);
@@ -431,7 +431,7 @@
         else { await resumePlayback(); setIsPlaying(true); }
       };
 
-      // ----- UI -----
+      // ----- Wheel UI (only once!) -----
       const renderWheel = () => {
         const percentage = (timeLeft / gameSettings.roundLength) * 100;
         const dashArray = 2 * Math.PI * 220;
@@ -472,12 +472,10 @@
                 </button>
               </div>
             </div>
-
             <div className="absolute bottom-10 right-10 text-right z-20">
               <div className="text-white text-2xl font-bold mb-2 drop-shadow-lg">Round {currentRound}/{playlist.length}</div>
               <div className="text-cyan-300 text-xl drop-shadow-lg">{timeLeft}s left</div>
             </div>
-
             {currentRound >= playlist.length && timeLeft === 0 && (
               <div className="absolute inset-0 flex items-center justify-center z-30 bg-black bg-opacity-70">
                 <div className="text-center">
@@ -590,7 +588,7 @@
                       <input type="number" value={gameSettings.roundLength}
                              onChange={(e) => setGameSettings({...gameSettings, roundLength: parseInt(e.target.value) || 10})}
                              min="10" max="300"
-                             className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white focus:ring-2 focus:ring-cyan-500 focus-border-transparent text-lg" />
+                             className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg" />
                     </div>
                     <button onClick={handleStartGame}
                             className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-8 py-5 rounded-xl text-xl font-semibold transition-all shadow-2xl hover:scale-105"
@@ -606,67 +604,6 @@
           {step === 4 && renderWheel()}
         </div>
       );
-
-      // ----- Wheel UI -----
-      function renderWheel() {
-        const percentage = (timeLeft / gameSettings.roundLength) * 100;
-        const dashArray = 2 * Math.PI * 220;
-        const dashOffset = dashArray - (dashArray * percentage) / 100;
-        const shouldBlur = timeLeft > 10;
-
-        return (
-          <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
-            <SpaceyBackground />
-            <div className="relative z-10 flex flex-col items-center justify-center">
-              <div className="relative w-[600px] h-[600px] animate-pulse">
-                <svg className="transform -rotate-90 w-[600px] h-[600px]">
-                  <circle cx="300" cy="300" r="220" stroke="rgba(255,255,255,0.1)" strokeWidth="35" fill="none" />
-                  <circle cx="300" cy="300" r="220" stroke="url(#gradient)" strokeWidth="35" fill="none"
-                          strokeDasharray={dashArray} strokeDashoffset={dashOffset}
-                          className="transition-all duration-1000" strokeLinecap="round"
-                          style={{ filter: 'drop-shadow(0 0 30px rgba(59,130,246,0.9))' }}/>
-                  <defs>
-                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" style={{stopColor: '#3b82f6', stopOpacity: 1}} />
-                      <stop offset="50%" style={{stopColor: '#06b6d4', stopOpacity: 1}} />
-                      <stop offset="100%" style={{stopColor: '#10b981', stopOpacity: 1}} />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center px-20">
-                  <div className={`text-center transition-all duration-500 ${shouldBlur ? 'blur-lg' : ''}`}>
-                    <div className="text-5xl font-bold text-white mb-6 drop-shadow-2xl leading-tight">{currentTrack?.name}</div>
-                    <div className="text-3xl text-gray-200 drop-shadow-xl">{currentTrack?.artist}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-16">
-                <button onClick={togglePlayPause}
-                        className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white p-6 rounded-full transition-all shadow-2xl hover:scale-110"
-                        style={{ boxShadow: '0 0 50px rgba(6, 182, 212, 0.7)' }}>
-                  {isPlaying ? <PauseIcon /> : <PlayIcon />}
-                </button>
-              </div>
-            </div>
-
-            <div className="absolute bottom-10 right-10 text-right z-20">
-              <div className="text-white text-2xl font-bold mb-2 drop-shadow-lg">Round {currentRound}/{playlist.length}</div>
-              <div className="text-cyan-300 text-xl drop-shadow-lg">{timeLeft}s left</div>
-            </div>
-
-            {currentRound >= playlist.length && timeLeft === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center z-30 bg-black bg-opacity-70">
-                <div className="text-center">
-                  <div className="text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-4 animate-pulse">
-                    Game Complete! 🎉
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      }
     }
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
