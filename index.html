@@ -332,60 +332,96 @@
 
             const renderWheel = () => {
                 const percentage = (timeLeft / gameSettings.roundLength) * 100;
-                const dashArray = 2 * Math.PI * 90;
+                const dashArray = 2 * Math.PI * 180;
                 const dashOffset = dashArray - (dashArray * percentage) / 100;
                 const shouldBlur = timeLeft > 10;
 
                 return (
-                    <div className="flex flex-col items-center justify-center space-y-8">
-                        <div className="relative w-80 h-80">
-                            <svg className="transform -rotate-90 w-80 h-80">
-                                <circle
-                                    cx="160"
-                                    cy="160"
-                                    r="90"
-                                    stroke="#e5e7eb"
-                                    strokeWidth="20"
-                                    fill="none"
-                                />
-                                <circle
-                                    cx="160"
-                                    cy="160"
-                                    r="90"
-                                    stroke="#3b82f6"
-                                    strokeWidth="20"
-                                    fill="none"
-                                    strokeDasharray={dashArray}
-                                    strokeDashoffset={dashOffset}
-                                    className="transition-all duration-1000"
-                                    strokeLinecap="round"
-                                />
-                            </svg>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <div className={`text-center px-8 transition-all duration-500 ${shouldBlur ? 'blur-md' : ''}`}>
-                                    <div className="text-xl font-bold mb-2">{currentTrack?.name}</div>
-                                    <div className="text-gray-600">{currentTrack?.artist}</div>
+                    <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+                        {/* Spacey blurry background */}
+                        <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-blue-900 to-black">
+                            <div className="absolute top-20 left-20 w-96 h-96 bg-purple-500 rounded-full blur-3xl opacity-30 animate-pulse"></div>
+                            <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-500 rounded-full blur-3xl opacity-30 animate-pulse" style={{animationDelay: '1s'}}></div>
+                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-pink-500 rounded-full blur-3xl opacity-20 animate-pulse" style={{animationDelay: '2s'}}></div>
+                        </div>
+
+                        {/* Main content */}
+                        <div className="relative z-10 flex flex-col items-center justify-center">
+                            {/* Large pulsating wheel */}
+                            <div className="relative w-[500px] h-[500px] animate-pulse">
+                                <svg className="transform -rotate-90 w-[500px] h-[500px]">
+                                    <circle
+                                        cx="250"
+                                        cy="250"
+                                        r="180"
+                                        stroke="rgba(255, 255, 255, 0.1)"
+                                        strokeWidth="30"
+                                        fill="none"
+                                    />
+                                    <circle
+                                        cx="250"
+                                        cy="250"
+                                        r="180"
+                                        stroke="url(#gradient)"
+                                        strokeWidth="30"
+                                        fill="none"
+                                        strokeDasharray={dashArray}
+                                        strokeDashoffset={dashOffset}
+                                        className="transition-all duration-1000"
+                                        strokeLinecap="round"
+                                        style={{
+                                            filter: 'drop-shadow(0 0 20px rgba(147, 51, 234, 0.8))'
+                                        }}
+                                    />
+                                    <defs>
+                                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" style={{stopColor: '#a855f7', stopOpacity: 1}} />
+                                            <stop offset="50%" style={{stopColor: '#ec4899', stopOpacity: 1}} />
+                                            <stop offset="100%" style={{stopColor: '#3b82f6', stopOpacity: 1}} />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                                
+                                {/* Song info in center of wheel */}
+                                <div className="absolute inset-0 flex flex-col items-center justify-center px-16">
+                                    <div className={`text-center transition-all duration-500 ${shouldBlur ? 'blur-md' : ''}`}>
+                                        <div className="text-4xl font-bold text-white mb-4 drop-shadow-lg">{currentTrack?.name}</div>
+                                        <div className="text-2xl text-gray-300 drop-shadow-lg">{currentTrack?.artist}</div>
+                                    </div>
                                 </div>
-                                <div className="text-4xl font-bold mt-4">{timeLeft}s</div>
+                            </div>
+
+                            {/* Play/Pause button below wheel */}
+                            <div className="mt-12">
+                                <button
+                                    onClick={togglePlayPause}
+                                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white p-6 rounded-full transition-all shadow-2xl hover:scale-110"
+                                    style={{
+                                        boxShadow: '0 0 40px rgba(147, 51, 234, 0.6)'
+                                    }}
+                                >
+                                    {isPlaying ? <PauseIcon /> : <PlayIcon />}
+                                </button>
                             </div>
                         </div>
 
-                        <div className="flex items-center space-x-4">
-                            <button
-                                onClick={togglePlayPause}
-                                className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full transition-colors shadow-lg"
-                            >
-                                {isPlaying ? <PauseIcon /> : <PlayIcon />}
-                            </button>
-                        </div>
-
-                        <div className="text-center">
-                            <div className="text-2xl font-bold">Round {currentRound} of {playlist.length}</div>
+                        {/* Round and time info in bottom right */}
+                        <div className="absolute bottom-8 right-8 text-right z-20">
+                            <div className="text-white text-xl font-semibold mb-2 drop-shadow-lg">
+                                Round {currentRound}/{playlist.length}
+                            </div>
+                            <div className="text-gray-300 text-lg drop-shadow-lg">
+                                {timeLeft}s left
+                            </div>
                         </div>
 
                         {currentRound >= playlist.length && timeLeft === 0 && (
-                            <div className="text-center mt-4">
-                                <div className="text-3xl font-bold text-green-600">Game Complete! 🎉</div>
+                            <div className="absolute inset-0 flex items-center justify-center z-30 bg-black bg-opacity-50">
+                                <div className="text-center">
+                                    <div className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 mb-4">
+                                        Game Complete! 🎉
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>
