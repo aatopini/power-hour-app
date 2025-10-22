@@ -73,7 +73,8 @@
             const [player, setPlayer] = useState(null);
             const [playlistCriteria, setPlaylistCriteria] = useState({
                 genre: '',
-                timePeriod: ''
+                timePeriod: '',
+                difficulty: 1
             });
             const [playlist, setPlaylist] = useState([]);
             const [gameSettings, setGameSettings] = useState({
@@ -178,21 +179,68 @@
                 }
             }, [spotifyToken, player]);
 
+            // Get seed artists for a genre
+            const getSeedArtists = async (genre) => {
+                try {
+                    const response = await fetch(
+                        `https://api.spotify.com/v1/search?q=genre:${encodeURIComponent(genre)}&type=artist&limit=5`,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${spotifyToken}`
+                            }
+                        }
+                    );
+                    const data = await response.json();
+                    return data.artists.items.slice(0, 3).map(artist => artist.id);
+                } catch (error) {
+                    console.error('Error getting seed artists:', error);
+                    return [];
+                }
+            };
+
             const searchTracks = async () => {
                 if (!spotifyToken) return;
 
                 try {
-                    let query = playlistCriteria.genre;
+                    // Get seed artists based on genre
+                    const seedArtists = await getSeedArtists(playlistCriteria.genre);
                     
+                    if (seedArtists.length === 0) {
+                        alert('Could not find artists for this genre. Try a different genre name.');
+                        return [];
+                    }
+
+                    // Map difficulty to popularity ranges
+                    const difficultyMap = {
+                        1: { min: 70, max: 100 },  // Mainstream - very popular
+                        2: { min: 50, max: 80 },   // Novice - popular
+                        3: { min: 30, max: 60 },   // Adept - moderate
+                        4: { min: 15, max: 40 },   // Expert - less known
+                        5: { min: 0, max: 25 }     // Pro - obscure/niche
+                    };
+
+                    const popularity = difficultyMap[playlistCriteria.difficulty];
+
+                    // Build recommendations query
+                    let params = {
+                        seed_artists: seedArtists.join(','),
+                        limit: 50,
+                        min_popularity: popularity.min,
+                        max_popularity: popularity.max
+                    };
+
+                    // Add year filter if time period specified
                     if (playlistCriteria.timePeriod) {
                         const yearMatch = playlistCriteria.timePeriod.match(/(\d{4})/);
                         if (yearMatch) {
-                            query += ` year:${yearMatch[1]}`;
+                            const year = parseInt(yearMatch[1]);
+                            params.target_year = year;
                         }
                     }
 
+                    const queryString = new URLSearchParams(params).toString();
                     const response = await fetch(
-                        `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=50`,
+                        `https://api.spotify.com/v1/recommendations?${queryString}`,
                         {
                             headers: {
                                 'Authorization': `Bearer ${spotifyToken}`
@@ -202,13 +250,16 @@
 
                     const data = await response.json();
                     
-                    if (data.tracks && data.tracks.items) {
-                        const shuffled = data.tracks.items
+                    if (data.tracks && data.tracks.length > 0) {
+                        const shuffled = data.tracks
                             .sort(() => 0.5 - Math.random())
-                            .slice(0, gameSettings.rounds);
+                            .slice(0, Math.min(gameSettings.rounds, data.tracks.length));
                         
                         setPlaylist(shuffled);
                         return shuffled;
+                    } else {
+                        alert('No tracks found. Try adjusting your criteria.');
+                        return [];
                     }
                 } catch (error) {
                     console.error('Error searching tracks:', error);
@@ -487,7 +538,7 @@
                                                 type="text"
                                                 value={playlistCriteria.genre}
                                                 onChange={(e) => setPlaylistCriteria({...playlistCriteria, genre: e.target.value})}
-                                                placeholder="e.g., Pop, Rock, Hip Hop"
+                                                placeholder="e.g., emo, rock, hip hop, indie"
                                                 className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg"
                                             />
                                         </div>
@@ -502,6 +553,23 @@
                                                 placeholder="e.g., 2000s, 1990, 2010-2020"
                                                 className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg"
                                             />
+                                        </div>
+                                        <div>
+                                            <label className="block text-lg font-medium text-cyan-300 mb-3">
+                                                Difficulty Level
+                                            </label>
+                                            <select
+                                                value={playlistCriteria.difficulty}
+                                                onChange={(e) => setPlaylistCriteria({...playlistCriteria, difficulty: parseInt(e.target.value)})}
+                                                className="w-full px-6 py-4 bg-black bg-opacity-50 backdrop-blur-sm border border-cyan-500 border-opacity-30 rounded-xl text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg cursor-pointer"
+                                            >
+                                                <option value="1">1. Mainstream - Well-known hits</option>
+                                                <option value="2">2. Novice - Popular songs</option>
+                                                <option value="3">3. Adept - Mix of popular and deep cuts</option>
+                                                <option value="4">4. Expert - Lesser-known tracks</option>
+                                                <option value="5">5. Pro - Obscure and niche</option>
+                                            </select>
+                                            <p className="text-sm text-gray-400 mt-2">Controls how well-known the songs are</p>
                                         </div>
                                         <button
                                             onClick={handleCreatePlaylist}
