@@ -182,28 +182,54 @@
                 }
             }, [spotifyToken, player]);
 
-            // New approach: Search for genre-specific playlists and pull tracks from them
+            // Simplified and more reliable track search
             const searchTracks = async () => {
                 if (!spotifyToken) return;
 
                 try {
-                    // Map difficulty to popularity ranges (now with wider ranges for more results)
+                    console.log('Starting search for genre:', playlistCriteria.genre);
+                    
+                    // Map difficulty to popularity ranges
                     const difficultyMap = {
-                        1: { min: 60, max: 100 },  // Mainstream
-                        2: { min: 40, max: 90 },   // Novice (widened)
-                        3: { min: 20, max: 70 },   // Adept (widened)
-                        4: { min: 10, max: 50 },   // Expert (widened)
-                        5: { min: 0, max: 35 }     // Pro (widened)
+                        1: { min: 60, max: 100 },
+                        2: { min: 40, max: 90 },
+                        3: { min: 20, max: 70 },
+                        4: { min: 10, max: 50 },
+                        5: { min: 0, max: 35 }
                     };
 
                     const popularity = difficultyMap[playlistCriteria.difficulty];
                     let allTracks = [];
 
-                    // Method 1: Try searching for genre playlists
+                    // Method 1: Search for tracks directly with genre keyword
+                    console.log('Method 1: Direct track search...');
                     try {
-                        const playlistQuery = `${playlistCriteria.genre}`;
+                        const trackResponse = await fetch(
+                            `https://api.spotify.com/v1/search?q=${encodeURIComponent(playlistCriteria.genre)}&type=track&limit=50`,
+                            {
+                                headers: {
+                                    'Authorization': `Bearer ${spotifyToken}`
+                                }
+                            }
+                        );
+                        
+                        const trackData = await trackResponse.json();
+                        console.log('Track search response:', trackData);
+                        
+                        if (trackData.tracks && trackData.tracks.items) {
+                            const validTracks = trackData.tracks.items.filter(t => t && t.uri && t.name && t.artists);
+                            console.log(`Found ${validTracks.length} valid tracks from direct search`);
+                            allTracks = allTracks.concat(validTracks);
+                        }
+                    } catch (error) {
+                        console.error('Error in direct track search:', error);
+                    }
+
+                    // Method 2: Search playlists
+                    console.log('Method 2: Playlist search...');
+                    try {
                         const playlistResponse = await fetch(
-                            `https://api.spotify.com/v1/search?q=${encodeURIComponent(playlistQuery)}&type=playlist&limit=20`,
+                            `https://api.spotify.com/v1/search?q=${encodeURIComponent(playlistCriteria.genre)}&type=playlist&limit=10`,
                             {
                                 headers: {
                                     'Authorization': `Bearer ${spotifyToken}`
@@ -212,13 +238,13 @@
                         );
 
                         const playlistData = await playlistResponse.json();
+                        console.log('Playlist search response:', playlistData);
                         
                         if (playlistData.playlists && playlistData.playlists.items.length > 0) {
-                            // Pull from playlists (up to 15)
-                            for (const pl of playlistData.playlists.items.slice(0, 15)) {
+                            for (const pl of playlistData.playlists.items.slice(0, 5)) {
                                 try {
                                     const tracksResponse = await fetch(
-                                        `https://api.spotify.com/v1/playlists/${pl.id}/tracks?limit=100`,
+                                        `https://api.spotify.com/v1/playlists/${pl.id}/tracks?limit=50`,
                                         {
                                             headers: {
                                                 'Authorization': `Bearer ${spotifyToken}`
@@ -229,11 +255,12 @@
                                     const tracksData = await tracksResponse.json();
                                     
                                     if (tracksData.items) {
-                                        const tracks = tracksData.items
-                                            .filter(item => item.track && item.track.preview_url && item.track.uri)
+                                        const validTracks = tracksData.items
+                                            .filter(item => item.track && item.track.uri && item.track.name && item.track.artists)
                                             .map(item => item.track);
                                         
-                                        allTracks = allTracks.concat(tracks);
+                                        console.log(`Found ${validTracks.length} tracks from playlist: ${pl.name}`);
+                                        allTracks = allTracks.concat(validTracks);
                                     }
                                 } catch (error) {
                                     console.error('Error fetching playlist tracks:', error);
@@ -241,140 +268,123 @@
                             }
                         }
                     } catch (error) {
-                        console.error('Error searching playlists:', error);
+                        console.error('Error in playlist search:', error);
                     }
 
-                    // Method 2: If we don't have enough tracks, search for tracks directly
-                    if (allTracks.length < 100) {
-                        try {
-                            const trackSearchQuery = `genre:${playlistCriteria.genre}`;
-                            const trackResponse = await fetch(
-                                `https://api.spotify.com/v1/search?q=${encodeURIComponent(trackSearchQuery)}&type=track&limit=50`,
-                                {
-                                    headers: {
-                                        'Authorization': `Bearer ${spotifyToken}`
-                                    }
+                    // Method 3: Search for artists and get their top tracks
+                    console.log('Method 3: Artist search...');
+                    try {
+                        const artistResponse = await fetch(
+                            `https://api.spotify.com/v1/search?q=${encodeURIComponent(playlistCriteria.genre)}&type=artist&limit=10`,
+                            {
+                                headers: {
+                                    'Authorization': `Bearer ${spotifyToken}`
                                 }
-                            );
-                            
-                            const trackData = await trackResponse.json();
-                            
-                            if (trackData.tracks && trackData.tracks.items) {
-                                allTracks = allTracks.concat(trackData.tracks.items.filter(t => t.preview_url && t.uri));
                             }
-                        } catch (error) {
-                            console.error('Error searching tracks:', error);
-                        }
-                    }
-
-                    // Method 3: If still not enough, try artist search
-                    if (allTracks.length < 100) {
-                        try {
-                            const artistSearchQuery = playlistCriteria.genre;
-                            const artistResponse = await fetch(
-                                `https://api.spotify.com/v1/search?q=${encodeURIComponent(artistSearchQuery)}&type=artist&limit=10`,
-                                {
-                                    headers: {
-                                        'Authorization': `Bearer ${spotifyToken}`
-                                    }
-                                }
-                            );
-                            
-                            const artistData = await artistResponse.json();
-                            
-                            if (artistData.artists && artistData.artists.items.length > 0) {
-                                // Get top tracks from each artist
-                                for (const artist of artistData.artists.items.slice(0, 10)) {
-                                    try {
-                                        const topTracksResponse = await fetch(
-                                            `https://api.spotify.com/v1/artists/${artist.id}/top-tracks?market=US`,
-                                            {
-                                                headers: {
-                                                    'Authorization': `Bearer ${spotifyToken}`
-                                                }
+                        );
+                        
+                        const artistData = await artistResponse.json();
+                        console.log('Artist search response:', artistData);
+                        
+                        if (artistData.artists && artistData.artists.items.length > 0) {
+                            for (const artist of artistData.artists.items.slice(0, 5)) {
+                                try {
+                                    const topTracksResponse = await fetch(
+                                        `https://api.spotify.com/v1/artists/${artist.id}/top-tracks?market=US`,
+                                        {
+                                            headers: {
+                                                'Authorization': `Bearer ${spotifyToken}`
                                             }
-                                        );
-                                        
-                                        const topTracksData = await topTracksResponse.json();
-                                        
-                                        if (topTracksData.tracks) {
-                                            allTracks = allTracks.concat(topTracksData.tracks.filter(t => t.preview_url && t.uri));
                                         }
-                                    } catch (error) {
-                                        console.error('Error fetching artist top tracks:', error);
+                                    );
+                                    
+                                    const topTracksData = await topTracksResponse.json();
+                                    
+                                    if (topTracksData.tracks) {
+                                        const validTracks = topTracksData.tracks.filter(t => t && t.uri && t.name && t.artists);
+                                        console.log(`Found ${validTracks.length} tracks from artist: ${artist.name}`);
+                                        allTracks = allTracks.concat(validTracks);
                                     }
+                                } catch (error) {
+                                    console.error('Error fetching artist top tracks:', error);
                                 }
                             }
-                        } catch (error) {
-                            console.error('Error searching artists:', error);
                         }
+                    } catch (error) {
+                        console.error('Error in artist search:', error);
                     }
+
+                    console.log(`Total tracks collected: ${allTracks.length}`);
 
                     if (allTracks.length === 0) {
                         alert('No tracks found for this genre. Try a different genre like "rock", "pop", "hip hop", or "indie".');
                         return [];
                     }
 
-                    // Filter by year if specified (with wider tolerance)
+                    // Remove duplicates
+                    const uniqueTracks = Array.from(new Map(allTracks.map(t => [t.id, t])).values());
+                    console.log(`Unique tracks: ${uniqueTracks.length}`);
+
+                    // Filter by year if specified
+                    let tracksToUse = uniqueTracks;
                     if (playlistCriteria.timePeriod) {
                         const yearMatch = playlistCriteria.timePeriod.match(/(\d{4})/);
                         if (yearMatch) {
                             const targetYear = parseInt(yearMatch[1]);
-                            const yearFilteredTracks = allTracks.filter(track => {
+                            const yearFilteredTracks = uniqueTracks.filter(track => {
                                 if (track.album && track.album.release_date) {
                                     const releaseYear = parseInt(track.album.release_date.substring(0, 4));
-                                    // Allow +/- 5 years from target for more results
                                     return Math.abs(releaseYear - targetYear) <= 5;
                                 }
                                 return false;
                             });
                             
-                            // Only apply year filter if we have enough tracks
-                            if (yearFilteredTracks.length >= 30) {
-                                allTracks = yearFilteredTracks;
+                            console.log(`Tracks after year filter: ${yearFilteredTracks.length}`);
+                            
+                            if (yearFilteredTracks.length >= 20) {
+                                tracksToUse = yearFilteredTracks;
                             }
                         }
                     }
 
-                    // Remove duplicates based on track ID
-                    const uniqueTracks = Array.from(new Map(allTracks.map(t => [t.id, t])).values());
-
-                    // Now apply popularity filter, but if we don't have enough, gradually widen the range
-                    let filteredTracks = uniqueTracks.filter(track => 
+                    // Apply popularity filter with fallback
+                    let filteredTracks = tracksToUse.filter(track => 
                         track.popularity >= popularity.min && track.popularity <= popularity.max
                     );
 
-                    // If we don't have enough tracks, gradually widen the popularity range
-                    if (filteredTracks.length < 60) {
-                        // Try with wider range
-                        filteredTracks = uniqueTracks.filter(track => 
+                    console.log(`Tracks after popularity filter: ${filteredTracks.length}`);
+
+                    if (filteredTracks.length < 30) {
+                        // Widen popularity range
+                        filteredTracks = tracksToUse.filter(track => 
                             track.popularity >= Math.max(0, popularity.min - 30) && 
                             track.popularity <= Math.min(100, popularity.max + 30)
                         );
+                        console.log(`Tracks after widened popularity filter: ${filteredTracks.length}`);
                     }
 
-                    // If still not enough, just use all tracks
-                    if (filteredTracks.length < 60) {
-                        filteredTracks = uniqueTracks;
+                    if (filteredTracks.length < 30) {
+                        // Use all tracks
+                        filteredTracks = tracksToUse;
+                        console.log(`Using all available tracks: ${filteredTracks.length}`);
                     }
 
                     if (filteredTracks.length === 0) {
-                        alert('No tracks found matching your criteria. Try a different genre or remove the time period filter.');
+                        alert('No tracks found matching your criteria. Try removing the time period or changing the difficulty.');
                         return [];
                     }
-
-                    console.log(`Found ${filteredTracks.length} tracks matching criteria`);
 
                     // Shuffle and select
                     const shuffled = filteredTracks
                         .sort(() => 0.5 - Math.random())
                         .slice(0, Math.min(gameSettings.rounds, filteredTracks.length));
                     
+                    console.log(`Final playlist: ${shuffled.length} tracks`);
                     setPlaylist(shuffled);
                     return shuffled;
                 } catch (error) {
                     console.error('Error searching tracks:', error);
-                    alert('Error searching for tracks. Please try again.');
+                    alert('Error searching for tracks. Please check the console and try again.');
                 }
                 return [];
             };
