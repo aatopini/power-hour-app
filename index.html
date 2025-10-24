@@ -197,33 +197,59 @@
                     };
 
                     const popularity = difficultyMap[playlistCriteria.difficulty];
+                    let allTracks = [];
 
-                    // First, search for playlists with the genre
-                    const playlistQuery = `${playlistCriteria.genre}`;
-                    const playlistResponse = await fetch(
-                        `https://api.spotify.com/v1/search?q=${encodeURIComponent(playlistQuery)}&type=playlist&limit=20`,
-                        {
-                            headers: {
-                                'Authorization': `Bearer ${spotifyToken}`
+                    // Method 1: Try searching for genre playlists
+                    try {
+                        const playlistQuery = `${playlistCriteria.genre}`;
+                        const playlistResponse = await fetch(
+                            `https://api.spotify.com/v1/search?q=${encodeURIComponent(playlistQuery)}&type=playlist&limit=20`,
+                            {
+                                headers: {
+                                    'Authorization': `Bearer ${spotifyToken}`
+                                }
+                            }
+                        );
+
+                        const playlistData = await playlistResponse.json();
+                        
+                        if (playlistData.playlists && playlistData.playlists.items.length > 0) {
+                            // Pull from playlists (up to 15)
+                            for (const pl of playlistData.playlists.items.slice(0, 15)) {
+                                try {
+                                    const tracksResponse = await fetch(
+                                        `https://api.spotify.com/v1/playlists/${pl.id}/tracks?limit=100`,
+                                        {
+                                            headers: {
+                                                'Authorization': `Bearer ${spotifyToken}`
+                                            }
+                                        }
+                                    );
+                                    
+                                    const tracksData = await tracksResponse.json();
+                                    
+                                    if (tracksData.items) {
+                                        const tracks = tracksData.items
+                                            .filter(item => item.track && item.track.preview_url && item.track.uri)
+                                            .map(item => item.track);
+                                        
+                                        allTracks = allTracks.concat(tracks);
+                                    }
+                                } catch (error) {
+                                    console.error('Error fetching playlist tracks:', error);
+                                }
                             }
                         }
-                    );
-
-                    const playlistData = await playlistResponse.json();
-                    
-                    if (!playlistData.playlists || playlistData.playlists.items.length === 0) {
-                        alert('No playlists found for this genre. Try a different genre.');
-                        return [];
+                    } catch (error) {
+                        console.error('Error searching playlists:', error);
                     }
 
-                    // Get tracks from multiple playlists to have variety
-                    let allTracks = [];
-                    
-                    // Pull from more playlists (up to 15)
-                    for (const pl of playlistData.playlists.items.slice(0, 15)) {
+                    // Method 2: If we don't have enough tracks, search for tracks directly
+                    if (allTracks.length < 100) {
                         try {
-                            const tracksResponse = await fetch(
-                                `https://api.spotify.com/v1/playlists/${pl.id}/tracks?limit=100`,
+                            const trackSearchQuery = `genre:${playlistCriteria.genre}`;
+                            const trackResponse = await fetch(
+                                `https://api.spotify.com/v1/search?q=${encodeURIComponent(trackSearchQuery)}&type=track&limit=50`,
                                 {
                                     headers: {
                                         'Authorization': `Bearer ${spotifyToken}`
@@ -231,18 +257,62 @@
                                 }
                             );
                             
-                            const tracksData = await tracksResponse.json();
+                            const trackData = await trackResponse.json();
                             
-                            if (tracksData.items) {
-                                const tracks = tracksData.items
-                                    .filter(item => item.track && item.track.preview_url)
-                                    .map(item => item.track);
-                                
-                                allTracks = allTracks.concat(tracks);
+                            if (trackData.tracks && trackData.tracks.items) {
+                                allTracks = allTracks.concat(trackData.tracks.items.filter(t => t.preview_url && t.uri));
                             }
                         } catch (error) {
-                            console.error('Error fetching playlist tracks:', error);
+                            console.error('Error searching tracks:', error);
                         }
+                    }
+
+                    // Method 3: If still not enough, try artist search
+                    if (allTracks.length < 100) {
+                        try {
+                            const artistSearchQuery = playlistCriteria.genre;
+                            const artistResponse = await fetch(
+                                `https://api.spotify.com/v1/search?q=${encodeURIComponent(artistSearchQuery)}&type=artist&limit=10`,
+                                {
+                                    headers: {
+                                        'Authorization': `Bearer ${spotifyToken}`
+                                    }
+                                }
+                            );
+                            
+                            const artistData = await artistResponse.json();
+                            
+                            if (artistData.artists && artistData.artists.items.length > 0) {
+                                // Get top tracks from each artist
+                                for (const artist of artistData.artists.items.slice(0, 10)) {
+                                    try {
+                                        const topTracksResponse = await fetch(
+                                            `https://api.spotify.com/v1/artists/${artist.id}/top-tracks?market=US`,
+                                            {
+                                                headers: {
+                                                    'Authorization': `Bearer ${spotifyToken}`
+                                                }
+                                            }
+                                        );
+                                        
+                                        const topTracksData = await topTracksResponse.json();
+                                        
+                                        if (topTracksData.tracks) {
+                                            allTracks = allTracks.concat(topTracksData.tracks.filter(t => t.preview_url && t.uri));
+                                        }
+                                    } catch (error) {
+                                        console.error('Error fetching artist top tracks:', error);
+                                    }
+                                }
+                            }
+                        } catch (error) {
+                            console.error('Error searching artists:', error);
+                        }
+                    }
+
+                    if (allTracks.length === 0) {
+                        alert('No tracks found for this genre. Try a different genre like "rock", "pop", "hip hop", or "indie".');
+                        return [];
                     }
 
                     // Filter by year if specified (with wider tolerance)
@@ -253,8 +323,8 @@
                             const yearFilteredTracks = allTracks.filter(track => {
                                 if (track.album && track.album.release_date) {
                                     const releaseYear = parseInt(track.album.release_date.substring(0, 4));
-                                    // Allow +/- 3 years from target for more results
-                                    return Math.abs(releaseYear - targetYear) <= 3;
+                                    // Allow +/- 5 years from target for more results
+                                    return Math.abs(releaseYear - targetYear) <= 5;
                                 }
                                 return false;
                             });
@@ -278,8 +348,8 @@
                     if (filteredTracks.length < 60) {
                         // Try with wider range
                         filteredTracks = uniqueTracks.filter(track => 
-                            track.popularity >= Math.max(0, popularity.min - 20) && 
-                            track.popularity <= Math.min(100, popularity.max + 20)
+                            track.popularity >= Math.max(0, popularity.min - 30) && 
+                            track.popularity <= Math.min(100, popularity.max + 30)
                         );
                     }
 
@@ -289,9 +359,11 @@
                     }
 
                     if (filteredTracks.length === 0) {
-                        alert('No tracks found matching your criteria. Try a different genre.');
+                        alert('No tracks found matching your criteria. Try a different genre or remove the time period filter.');
                         return [];
                     }
+
+                    console.log(`Found ${filteredTracks.length} tracks matching criteria`);
 
                     // Shuffle and select
                     const shuffled = filteredTracks
