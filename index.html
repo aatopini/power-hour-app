@@ -85,6 +85,7 @@
             const [currentRound, setCurrentRound] = useState(0);
             const [timeLeft, setTimeLeft] = useState(0);
             const [currentTrack, setCurrentTrack] = useState(null);
+            const [isLoading, setIsLoading] = useState(false);
             const timerRef = useRef(null);
 
             const CLIENT_ID = '8fc1832fa4174a4f91be79ec44113742';
@@ -138,12 +139,14 @@
                 const code = args.get('code');
 
                 if (code) {
+                    setIsLoading(true);
                     getAccessToken(code).then(token => {
                         setSpotifyToken(token);
                         window.localStorage.removeItem('code_verifier');
                         window.history.replaceState({}, document.title, REDIRECT_URI);
                     }).catch(error => {
                         console.error('Error getting access token:', error);
+                        setIsLoading(false);
                     });
                 }
             }, []);
@@ -184,13 +187,13 @@
                 if (!spotifyToken) return;
 
                 try {
-                    // Map difficulty to popularity ranges
+                    // Map difficulty to popularity ranges (now with wider ranges for more results)
                     const difficultyMap = {
-                        1: { min: 70, max: 100 },  // Mainstream
-                        2: { min: 50, max: 80 },   // Novice
-                        3: { min: 30, max: 60 },   // Adept
-                        4: { min: 15, max: 40 },   // Expert
-                        5: { min: 0, max: 25 }     // Pro
+                        1: { min: 60, max: 100 },  // Mainstream
+                        2: { min: 40, max: 90 },   // Novice (widened)
+                        3: { min: 20, max: 70 },   // Adept (widened)
+                        4: { min: 10, max: 50 },   // Expert (widened)
+                        5: { min: 0, max: 35 }     // Pro (widened)
                     };
 
                     const popularity = difficultyMap[playlistCriteria.difficulty];
@@ -198,7 +201,7 @@
                     // First, search for playlists with the genre
                     const playlistQuery = `${playlistCriteria.genre}`;
                     const playlistResponse = await fetch(
-                        `https://api.spotify.com/v1/search?q=${encodeURIComponent(playlistQuery)}&type=playlist&limit=10`,
+                        `https://api.spotify.com/v1/search?q=${encodeURIComponent(playlistQuery)}&type=playlist&limit=20`,
                         {
                             headers: {
                                 'Authorization': `Bearer ${spotifyToken}`
@@ -216,10 +219,11 @@
                     // Get tracks from multiple playlists to have variety
                     let allTracks = [];
                     
-                    for (const pl of playlistData.playlists.items.slice(0, 5)) {
+                    // Pull from more playlists (up to 15)
+                    for (const pl of playlistData.playlists.items.slice(0, 15)) {
                         try {
                             const tracksResponse = await fetch(
-                                `https://api.spotify.com/v1/playlists/${pl.id}/tracks?limit=50`,
+                                `https://api.spotify.com/v1/playlists/${pl.id}/tracks?limit=100`,
                                 {
                                     headers: {
                                         'Authorization': `Bearer ${spotifyToken}`
@@ -231,7 +235,7 @@
                             
                             if (tracksData.items) {
                                 const tracks = tracksData.items
-                                    .filter(item => item.track && item.track.popularity >= popularity.min && item.track.popularity <= popularity.max)
+                                    .filter(item => item.track && item.track.preview_url)
                                     .map(item => item.track);
                                 
                                 allTracks = allTracks.concat(tracks);
@@ -241,34 +245,58 @@
                         }
                     }
 
-                    // Filter by year if specified
+                    // Filter by year if specified (with wider tolerance)
                     if (playlistCriteria.timePeriod) {
                         const yearMatch = playlistCriteria.timePeriod.match(/(\d{4})/);
                         if (yearMatch) {
                             const targetYear = parseInt(yearMatch[1]);
-                            allTracks = allTracks.filter(track => {
+                            const yearFilteredTracks = allTracks.filter(track => {
                                 if (track.album && track.album.release_date) {
                                     const releaseYear = parseInt(track.album.release_date.substring(0, 4));
-                                    // Allow +/- 2 years from target
-                                    return Math.abs(releaseYear - targetYear) <= 2;
+                                    // Allow +/- 3 years from target for more results
+                                    return Math.abs(releaseYear - targetYear) <= 3;
                                 }
                                 return false;
                             });
+                            
+                            // Only apply year filter if we have enough tracks
+                            if (yearFilteredTracks.length >= 30) {
+                                allTracks = yearFilteredTracks;
+                            }
                         }
                     }
 
                     // Remove duplicates based on track ID
                     const uniqueTracks = Array.from(new Map(allTracks.map(t => [t.id, t])).values());
 
-                    if (uniqueTracks.length === 0) {
-                        alert('No tracks found matching your criteria. Try adjusting difficulty or time period.');
+                    // Now apply popularity filter, but if we don't have enough, gradually widen the range
+                    let filteredTracks = uniqueTracks.filter(track => 
+                        track.popularity >= popularity.min && track.popularity <= popularity.max
+                    );
+
+                    // If we don't have enough tracks, gradually widen the popularity range
+                    if (filteredTracks.length < 60) {
+                        // Try with wider range
+                        filteredTracks = uniqueTracks.filter(track => 
+                            track.popularity >= Math.max(0, popularity.min - 20) && 
+                            track.popularity <= Math.min(100, popularity.max + 20)
+                        );
+                    }
+
+                    // If still not enough, just use all tracks
+                    if (filteredTracks.length < 60) {
+                        filteredTracks = uniqueTracks;
+                    }
+
+                    if (filteredTracks.length === 0) {
+                        alert('No tracks found matching your criteria. Try a different genre.');
                         return [];
                     }
 
                     // Shuffle and select
-                    const shuffled = uniqueTracks
+                    const shuffled = filteredTracks
                         .sort(() => 0.5 - Math.random())
-                        .slice(0, Math.min(gameSettings.rounds, uniqueTracks.length));
+                        .slice(0, Math.min(gameSettings.rounds, filteredTracks.length));
                     
                     setPlaylist(shuffled);
                     return shuffled;
@@ -347,7 +375,8 @@
                 setCurrentTrack({
                     name: firstTrack.name,
                     artist: firstTrack.artists[0].name,
-                    uri: firstTrack.uri
+                    uri: firstTrack.uri,
+                    shouldBlur: true // Start blurred
                 });
                 setIsPlaying(true);
                 playTrack(firstTrack.uri);
@@ -364,7 +393,8 @@
                                     setCurrentTrack({
                                         name: nextTrack.name,
                                         artist: nextTrack.artists[0].name,
-                                        uri: nextTrack.uri
+                                        uri: nextTrack.uri,
+                                        shouldBlur: true // Start next track blurred
                                     });
                                     playTrack(nextTrack.uri);
                                     return gameSettings.roundLength;
@@ -400,7 +430,7 @@
                 const percentage = (timeLeft / gameSettings.roundLength) * 100;
                 const dashArray = 2 * Math.PI * 220;
                 const dashOffset = dashArray - (dashArray * percentage) / 100;
-                const shouldBlur = timeLeft > 10;
+                const shouldBlur = currentTrack?.shouldBlur !== false && timeLeft > 10;
 
                 return (
                     <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
@@ -491,7 +521,7 @@
 
             return (
                 <div className="min-h-screen">
-                    {step === 1 && (
+                    {step === 1 && !isLoading && (
                         <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
                             <SpaceyBackground />
                             
@@ -525,6 +555,19 @@
                                             Make sure you have Spotify Premium to use the playback features.
                                         </p>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {(step === 1 && isLoading) && (
+                        <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+                            <SpaceyBackground />
+                            
+                            <div className="relative z-10 text-center">
+                                <div className="text-white text-3xl font-bold mb-4">Connecting to Spotify...</div>
+                                <div className="flex justify-center">
+                                    <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
                                 </div>
                             </div>
                         </div>
