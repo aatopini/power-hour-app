@@ -458,16 +458,37 @@
                     name: firstTrack.name,
                     artist: firstTrack.artists[0].name,
                     uri: firstTrack.uri,
-                    shouldBlur: true // Start blurred
+                    shouldBlur: true,
+                    visible: false // Start invisible
                 });
                 setIsPlaying(true);
                 playTrack(firstTrack.uri);
+            };
+
+            const handleGoBack = async () => {
+                // Stop music
+                if (player) {
+                    await pausePlayback();
+                }
+                setIsPlaying(false);
+                
+                // Reset state
+                setStep(2);
+                setCurrentRound(0);
+                setTimeLeft(0);
+                setCurrentTrack(null);
+                setPlaylist([]);
             };
 
             useEffect(() => {
                 if (isPlaying && step === 4) {
                     timerRef.current = setInterval(() => {
                         setTimeLeft(prev => {
+                            // Make song visible at 10 seconds
+                            if (prev === 10 && currentTrack) {
+                                setCurrentTrack({...currentTrack, visible: true});
+                            }
+                            
                             if (prev <= 1) {
                                 if (currentRound < playlist.length) {
                                     const nextTrack = playlist[currentRound];
@@ -476,7 +497,8 @@
                                         name: nextTrack.name,
                                         artist: nextTrack.artists[0].name,
                                         uri: nextTrack.uri,
-                                        shouldBlur: true // Start next track blurred
+                                        shouldBlur: true,
+                                        visible: false // Start invisible for next track
                                     });
                                     playTrack(nextTrack.uri);
                                     return gameSettings.roundLength;
@@ -496,7 +518,7 @@
                         clearInterval(timerRef.current);
                     }
                 };
-            }, [isPlaying, step, currentRound, playlist, gameSettings]);
+            }, [isPlaying, step, currentRound, playlist, gameSettings, currentTrack]);
 
             const togglePlayPause = async () => {
                 if (isPlaying) {
@@ -510,91 +532,114 @@
 
             const renderWheel = () => {
                 const percentage = (timeLeft / gameSettings.roundLength) * 100;
-                const dashArray = 2 * Math.PI * 220;
+                const dashArray = 2 * Math.PI * 300; // Much bigger wheel
                 const dashOffset = dashArray - (dashArray * percentage) / 100;
-                const shouldBlur = currentTrack?.shouldBlur !== false && timeLeft > 10;
+                const isVisible = currentTrack?.visible === true;
+                const gameOver = currentRound >= playlist.length && timeLeft === 0;
 
                 return (
                     <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
                         <SpaceyBackground />
 
-                        {/* Main content */}
+                        {/* Go Back button in top left */}
+                        <button
+                            onClick={handleGoBack}
+                            className="absolute top-8 left-8 z-30 bg-white bg-opacity-20 backdrop-blur-sm hover:bg-opacity-30 text-white px-6 py-3 rounded-full font-semibold transition-all"
+                        >
+                            ← Go Back
+                        </button>
+
+                        {/* Main content centered */}
                         <div className="relative z-10 flex flex-col items-center justify-center">
-                            {/* Large pulsating wheel */}
-                            <div className="relative w-[600px] h-[600px] animate-pulse">
-                                <svg className="transform -rotate-90 w-[600px] h-[600px]">
+                            {/* Much larger pulsating wheel - 800px */}
+                            <div className="relative w-[800px] h-[800px] animate-pulse">
+                                <svg className="transform -rotate-90 w-[800px] h-[800px]">
                                     <circle
-                                        cx="300"
-                                        cy="300"
-                                        r="220"
+                                        cx="400"
+                                        cy="400"
+                                        r="300"
                                         stroke="rgba(255, 255, 255, 0.1)"
-                                        strokeWidth="35"
+                                        strokeWidth="45"
                                         fill="none"
                                     />
                                     <circle
-                                        cx="300"
-                                        cy="300"
-                                        r="220"
+                                        cx="400"
+                                        cy="400"
+                                        r="300"
                                         stroke="url(#gradient)"
-                                        strokeWidth="35"
+                                        strokeWidth="45"
                                         fill="none"
                                         strokeDasharray={dashArray}
                                         strokeDashoffset={dashOffset}
                                         className="transition-all duration-1000"
                                         strokeLinecap="round"
                                         style={{
-                                            filter: 'drop-shadow(0 0 30px rgba(59, 130, 246, 0.9))'
+                                            filter: 'drop-shadow(0 0 40px rgba(34, 197, 94, 0.9))'
                                         }}
                                     />
                                     <defs>
                                         <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                            <stop offset="0%" style={{stopColor: '#3b82f6', stopOpacity: 1}} />
-                                            <stop offset="50%" style={{stopColor: '#06b6d4', stopOpacity: 1}} />
-                                            <stop offset="100%" style={{stopColor: '#10b981', stopOpacity: 1}} />
+                                            <stop offset="0%" style={{stopColor: '#22c55e', stopOpacity: 1}} />
+                                            <stop offset="50%" style={{stopColor: '#10b981', stopOpacity: 1}} />
+                                            <stop offset="100%" style={{stopColor: '#84cc16', stopOpacity: 1}} />
                                         </linearGradient>
                                     </defs>
                                 </svg>
                                 
-                                {/* Song info in center of wheel */}
-                                <div className="absolute inset-0 flex flex-col items-center justify-center px-20">
-                                    <div className={`text-center transition-all duration-500 ${shouldBlur ? 'blur-lg' : ''}`}>
-                                        <div className="text-5xl font-bold text-white mb-6 drop-shadow-2xl leading-tight">{currentTrack?.name}</div>
-                                        <div className="text-3xl text-gray-200 drop-shadow-xl">{currentTrack?.artist}</div>
-                                    </div>
+                                {/* Song info - completely hidden or visible, NO BLUR */}
+                                <div className="absolute inset-0 flex flex-col items-center justify-center px-24">
+                                    {isVisible ? (
+                                        <div className="text-center">
+                                            <div className="text-6xl font-bold text-white mb-6 drop-shadow-2xl leading-tight">{currentTrack?.name}</div>
+                                            <div className="text-4xl text-gray-200 drop-shadow-xl">{currentTrack?.artist}</div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center">
+                                            <div className="text-8xl font-bold text-gray-400 drop-shadow-2xl">?</div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
-                            {/* Play/Pause button below wheel */}
-                            <div className="mt-16">
+                            {/* Controls BELOW wheel: Play/Pause button stacked above Round counter */}
+                            <div className="flex flex-col items-center space-y-6 mt-8">
                                 <button
                                     onClick={togglePlayPause}
-                                    className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white p-6 rounded-full transition-all shadow-2xl hover:scale-110"
+                                    className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white p-6 rounded-full transition-all shadow-2xl hover:scale-110"
                                     style={{
-                                        boxShadow: '0 0 50px rgba(6, 182, 212, 0.7)'
+                                        boxShadow: '0 0 50px rgba(34, 197, 94, 0.7)'
                                     }}
                                 >
                                     {isPlaying ? <PauseIcon /> : <PlayIcon />}
                                 </button>
-                            </div>
-                        </div>
-
-                        {/* Round and time info in bottom right */}
-                        <div className="absolute bottom-10 right-10 text-right z-20">
-                            <div className="text-white text-2xl font-bold mb-2 drop-shadow-lg">
-                                Round {currentRound}/{playlist.length}
-                            </div>
-                            <div className="text-cyan-300 text-xl drop-shadow-lg">
-                                {timeLeft}s left
-                            </div>
-                        </div>
-
-                        {currentRound >= playlist.length && timeLeft === 0 && (
-                            <div className="absolute inset-0 flex items-center justify-center z-30 bg-black bg-opacity-70">
+                                
                                 <div className="text-center">
-                                    <div className="text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 mb-4 animate-pulse">
-                                        Game Complete! 🎉
+                                    <div className="text-white text-3xl font-bold drop-shadow-lg">
+                                        Round {currentRound}/{playlist.length}
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        {/* Time left in bottom right */}
+                        <div className="absolute bottom-10 right-10 text-right z-20">
+                            <div className="text-green-300 text-4xl font-bold drop-shadow-lg">
+                                {timeLeft}s
+                            </div>
+                        </div>
+
+                        {/* Play Again button when game is over */}
+                        {gameOver && (
+                            <div className="absolute inset-0 flex items-center justify-center z-30 bg-black bg-opacity-70">
+                                <button
+                                    onClick={handleGoBack}
+                                    className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-12 py-6 rounded-full text-2xl font-bold transition-all shadow-2xl hover:scale-110"
+                                    style={{
+                                        boxShadow: '0 0 60px rgba(34, 197, 94, 0.8)'
+                                    }}
+                                >
+                                    Play Again?
+                                </button>
                             </div>
                         )}
                     </div>
